@@ -109,7 +109,7 @@ function LocalTab() {
     refresh();
   }, [refresh]);
 
-  const pickAndInspect = async () => {
+  const pickAndAdd = async () => {
     const path = await openDialog({
       multiple: false,
       filters: [{ name: "SmolVM pack", extensions: ["smolmachine"] }],
@@ -126,7 +126,7 @@ function LocalTab() {
 
   const runPack = async (path: string) => {
     try {
-      await api.runPack(path, { detach: true, network: true });
+      await api.runPack(path, { network: true });
     } catch (e) {
       setError(String(e));
     }
@@ -153,11 +153,11 @@ function LocalTab() {
           Refresh
         </button>
         <button
-          onClick={pickAndInspect}
+          onClick={pickAndAdd}
           className="inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-card px-3 py-1.5 text-sm hover:bg-bg-card/70"
         >
           <FolderOpen className="h-4 w-4" />
-          Inspect file…
+          Open pack…
         </button>
         <button
           onClick={prune}
@@ -176,8 +176,10 @@ function LocalTab() {
       )}
 
       <div className="border-b border-border bg-bg/50 px-6 py-2 text-xs text-fg-muted">
-        Scans <code>~/.smolvm/packs</code>. Use <em>Inspect file</em> to read a
-        pack from anywhere on disk.
+        smolvm does not maintain a pack registry — packs live wherever you saved
+        them. This scans <code>~/.smolvm/packs</code> and{" "}
+        <code>~/Documents/smolvm-packs</code>; use <em>Open pack</em> for files
+        elsewhere.
       </div>
 
       {packs.length === 0 && !picked ? (
@@ -186,7 +188,7 @@ function LocalTab() {
           <p className="text-base">No packs found.</p>
           <p className="max-w-md text-sm">
             Build one in the <strong>Build</strong> tab, or use{" "}
-            <em>Inspect file</em> to load a <code>.smolmachine</code> from
+            <em>Open pack</em> to load a <code>.smolmachine</code> from
             anywhere.
           </p>
         </div>
@@ -241,11 +243,13 @@ function LocalTab() {
 }
 
 function BuildTab() {
-  const [source, setSource] = useState<"smolfile" | "machine">("smolfile");
+  const [source, setSource] = useState<"smolfile" | "from_vm" | "image">(
+    "smolfile",
+  );
   const [smolfile, setSmolfile] = useState("");
-  const [machine, setMachine] = useState("");
+  const [fromVm, setFromVm] = useState("");
+  const [image, setImage] = useState("");
   const [output, setOutput] = useState("");
-  const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -270,9 +274,9 @@ function BuildTab() {
     try {
       const out = await api.createPack({
         smolfile: source === "smolfile" ? smolfile.trim() || null : null,
-        machine: source === "machine" ? machine.trim() || null : null,
+        from_vm: source === "from_vm" ? fromVm.trim() || null : null,
+        image: source === "image" ? image.trim() || null : null,
         output: output.trim() || null,
-        name: name.trim() || null,
       });
       setResult(out || "Pack created.");
     } catch (e) {
@@ -285,29 +289,35 @@ function BuildTab() {
   return (
     <div className="space-y-4 p-6">
       <div className="rounded-md border border-border bg-bg/50 px-4 py-3 text-xs text-fg-muted">
-        Runs <code>smolvm pack create</code>. Flag spellings are best-guess —
-        verify against your installed smolvm.
+        Runs <code>smolvm pack create</code>. The VM must be stopped when
+        packing from an existing machine.
       </div>
 
       <div className="space-y-2">
         <div className="text-sm font-medium">Source</div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <RadioCard
             active={source === "smolfile"}
             onClick={() => setSource("smolfile")}
             title="From smolfile"
-            subtitle="Build a fresh pack from a recipe."
+            subtitle="Build from a recipe."
           />
           <RadioCard
-            active={source === "machine"}
-            onClick={() => setSource("machine")}
-            title="From machine"
-            subtitle="Snapshot an existing machine."
+            active={source === "image"}
+            onClick={() => setSource("image")}
+            title="From image"
+            subtitle="Pack an OCI image."
+          />
+          <RadioCard
+            active={source === "from_vm"}
+            onClick={() => setSource("from_vm")}
+            title="From VM"
+            subtitle="Snapshot a stopped VM."
           />
         </div>
       </div>
 
-      {source === "smolfile" ? (
+      {source === "smolfile" && (
         <Field label="Smolfile path">
           <div className="flex gap-1">
             <input
@@ -327,12 +337,26 @@ function BuildTab() {
             </button>
           </div>
         </Field>
-      ) : (
-        <Field label="Machine name">
+      )}
+
+      {source === "image" && (
+        <Field label="OCI image" hint="e.g. alpine:latest or python:3.11-slim">
           <input
             {...noAutoCorrect}
-            value={machine}
-            onChange={(e) => setMachine(e.target.value)}
+            value={image}
+            onChange={(e) => setImage(e.target.value)}
+            placeholder="alpine:latest"
+            className="input font-mono"
+          />
+        </Field>
+      )}
+
+      {source === "from_vm" && (
+        <Field label="VM name" hint="must be stopped">
+          <input
+            {...noAutoCorrect}
+            value={fromVm}
+            onChange={(e) => setFromVm(e.target.value)}
             placeholder="my-vm"
             className="input"
           />
@@ -357,16 +381,6 @@ function BuildTab() {
             <FolderOpen className="h-4 w-4" />
           </button>
         </div>
-      </Field>
-
-      <Field label="Name (optional)" hint="embedded in metadata">
-        <input
-          {...noAutoCorrect}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="my-pack:0.1"
-          className="input"
-        />
       </Field>
 
       {error && (

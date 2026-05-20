@@ -10,13 +10,14 @@ export interface Pack {
 
 export interface CreatePackOpts {
   smolfile?: string | null;
-  machine?: string | null;
+  /** Stopped VM name to snapshot. Maps to `--from-vm`. */
+  from_vm?: string | null;
+  /** OCI image reference. Maps to `--image`. */
+  image?: string | null;
+  /** Output `.smolmachine` path. Required by smolvm. */
   output?: string | null;
-  name?: string | null;
 }
 
 export interface RunPackOpts {
-  detach: boolean;
   network: boolean;
-  name?: string | null;
 }

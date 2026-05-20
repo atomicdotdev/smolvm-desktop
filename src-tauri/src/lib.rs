@@ -57,6 +57,7 @@ pub fn run() {
             commands::config::smolvm_config,
             commands::pack::list_packs,
             commands::pack::inspect_pack,
+            commands::pack::inspect_registry_pack,
             commands::pack::create_pack,
             commands::pack::run_pack,
             commands::pack::push_pack,

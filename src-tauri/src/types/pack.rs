@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pack {
-    /// Filesystem path to the `.smolmachine` artifact.
+    /// Filesystem path to the `.smolmachine` artifact (or registry ref when
+    /// produced from `pack inspect <ref> --json`).
     pub path: String,
     /// Display name derived from metadata or the file stem.
     pub name: String,
@@ -14,8 +15,8 @@ pub struct Pack {
     pub created: Option<String>,
     #[serde(default)]
     pub digest: Option<String>,
-    /// Full `pack inspect --json` payload — surfaced verbatim in the UI for
-    /// debugging fields we haven't modeled yet.
+    /// Full `pack inspect --json` payload (registry inspects only) — surfaced
+    /// verbatim in the UI for debugging fields we haven't modeled yet.
     #[serde(default)]
     pub raw: serde_json::Value,
 }
@@ -69,27 +70,19 @@ pub struct CreatePackOpts {
     /// Path to a smolfile to build from.
     #[serde(default)]
     pub smolfile: Option<String>,
-    /// Name of an existing machine to snapshot into a pack.
+    /// Name of a stopped VM to snapshot. Maps to `--from-vm`.
     #[serde(default)]
-    pub machine: Option<String>,
-    /// Output `.smolmachine` path.
+    pub from_vm: Option<String>,
+    /// OCI image reference. Maps to `--image`.
+    #[serde(default)]
+    pub image: Option<String>,
+    /// Output `.smolmachine` path. Required by smolvm.
     #[serde(default)]
     pub output: Option<String>,
-    /// Optional registry-style name embedded in metadata.
-    #[serde(default)]
-    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RunPackOpts {
-    #[serde(default = "default_true")]
-    pub detach: bool,
     #[serde(default)]
     pub network: bool,
-    #[serde(default)]
-    pub name: Option<String>,
-}
-
-fn default_true() -> bool {
-    true
 }

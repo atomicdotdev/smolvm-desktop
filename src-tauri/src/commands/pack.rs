@@ -1,30 +1,28 @@
 //! Commands wrapping `smolvm pack …`.
 //!
 //! smolvm packs (`.smolmachine` files) are portable artifacts built from a
-//! smolfile or a running machine. These commands shell out to the smolvm CLI
-//! and return parsed metadata.
+//! smolfile, OCI image, or stopped VM. These commands shell out to the smolvm
+//! CLI; flag spellings were verified against smolvm 0.7.1.
 
 use std::path::PathBuf;
 
 use crate::smolvm::cli;
 use crate::types::{CreatePackOpts, Pack, RunPackOpts};
 
-/// Best-effort listing of packs known locally.
-///
-/// smolvm's CLI does not (yet) ship a `pack ls` subcommand; instead we look
-/// for `.smolmachine` files inside a conventional cache directory under
-/// `~/.smolvm/packs`. If the directory doesn't exist we return an empty list
-/// — callers fall back to a file picker.
-// TODO: verify pack list location / replace with `pack ls --json` once smolvm exposes it.
+/// Best-effort listing of packs known locally. smolvm has no `pack ls`
+/// subcommand and no canonical pack directory (users save to arbitrary
+/// `--output` paths). This scans a couple of common locations and stats
+/// each `.smolmachine` file. Use a file picker in the UI for packs
+/// stored elsewhere.
 #[tauri::command]
 pub async fn list_packs() -> Result<Vec<Pack>, String> {
     let mut dirs: Vec<PathBuf> = Vec::new();
-    if let Some(home) = dirs_home() {
+    if let Some(home) = home_dir() {
         dirs.push(home.join(".smolvm").join("packs"));
-        dirs.push(home.join(".smolvm").join("cache").join("packs"));
+        dirs.push(home.join("Documents").join("smolvm-packs"));
     }
 
-    let mut paths: Vec<PathBuf> = Vec::new();
+    let mut out: Vec<Pack> = Vec::new();
     for d in &dirs {
         if !d.is_dir() {
             continue;
@@ -41,63 +39,55 @@ pub async fn list_packs() -> Result<Vec<Pack>, String> {
                     .map(|s| s.eq_ignore_ascii_case("smolmachine"))
                     .unwrap_or(false)
             {
-                paths.push(p);
+                out.push(Pack::stub(&p));
             }
-        }
-    }
-
-    let mut out: Vec<Pack> = Vec::new();
-    for p in paths {
-        match inspect_pack_inner(&p).await {
-            Ok(pack) => out.push(pack),
-            Err(_) => out.push(Pack::stub(&p)),
         }
     }
     Ok(out)
 }
 
-fn dirs_home() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from)
-}
-
+/// Stat a local pack file. smolvm's `pack inspect` only works on registry
+/// references, not local file paths, so this returns metadata derived from
+/// the filesystem (size, name from stem) rather than from the pack contents.
 #[tauri::command]
 pub async fn inspect_pack(path: String) -> Result<Pack, String> {
-    inspect_pack_inner(std::path::Path::new(&path)).await
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Err(format!("pack file not found: {path}"));
+    }
+    Ok(Pack::stub(p))
 }
 
-async fn inspect_pack_inner(path: &std::path::Path) -> Result<Pack, String> {
-    let p = path.to_string_lossy().to_string();
-    // TODO: verify flag spelling — assuming `pack inspect <path> --json`.
-    let json = cli::run_checked(&["pack", "inspect", &p, "--json"]).await?;
+/// Inspect a registry artifact reference. Maps to `smolvm pack inspect <ref> --json`.
+#[tauri::command]
+pub async fn inspect_registry_pack(reference: String) -> Result<Pack, String> {
+    let json = cli::run_checked(&["pack", "inspect", &reference, "--json"]).await?;
     let raw: serde_json::Value =
         serde_json::from_str(json.trim()).map_err(|e| format!("parse pack inspect json: {e}"))?;
-    Ok(Pack::from_inspect(&p, raw))
+    Ok(Pack::from_inspect(&reference, raw))
 }
 
 #[tauri::command]
 pub async fn create_pack(opts: CreatePackOpts) -> Result<String, String> {
     let mut args: Vec<String> = vec!["pack".into(), "create".into()];
 
-    // TODO: verify flag spellings. We assume:
-    //   --smolfile <path>   build from a smolfile
-    //   --machine <name>    snapshot a running/created machine
-    //   --output <path>     destination .smolmachine
-    //   --name <ref>        optional registry-style name embedded in metadata
     if let Some(smolfile) = opts.smolfile.as_ref().and_then(trim_opt) {
         args.push("--smolfile".into());
         args.push(smolfile);
     }
-    if let Some(machine) = opts.machine.as_ref().and_then(trim_opt) {
-        args.push("--machine".into());
-        args.push(machine);
+    if let Some(from_vm) = opts.from_vm.as_ref().and_then(trim_opt) {
+        args.push("--from-vm".into());
+        args.push(from_vm);
     }
+    if let Some(image) = opts.image.as_ref().and_then(trim_opt) {
+        args.push("--image".into());
+        args.push(image);
+    }
+    // --output is required by smolvm — let it error if missing rather than
+    // guessing a default that surprises the user.
     if let Some(output) = opts.output.as_ref().and_then(trim_opt) {
         args.push("--output".into());
         args.push(output);
-    }
-    if let Some(name) = opts.name.as_ref().and_then(trim_opt) {
-        args.push("--name".into());
-        args.push(name);
     }
 
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -105,23 +95,15 @@ pub async fn create_pack(opts: CreatePackOpts) -> Result<String, String> {
     Ok(out.trim().to_string())
 }
 
+/// Run a packed sidecar. smolvm's `pack run` runs in the foreground and
+/// blocks until the workload exits — there is no detach flag. This wrapper
+/// is best for short non-interactive workloads or `--info` previews.
 #[tauri::command]
 pub async fn run_pack(path: String, opts: RunPackOpts) -> Result<String, String> {
-    let mut args: Vec<String> = vec!["pack".into(), "run".into(), path];
-
-    // smolvm's `machine run` uses `-d` to detach; we assume `pack run` mirrors it.
-    // TODO: verify `pack run` flag set against live smolvm.
-    if opts.detach {
-        args.push("-d".into());
-    }
+    let mut args: Vec<String> = vec!["pack".into(), "run".into(), "--sidecar".into(), path];
     if opts.network {
         args.push("--net".into());
     }
-    if let Some(name) = opts.name.as_ref().and_then(trim_opt) {
-        args.push("--name".into());
-        args.push(name);
-    }
-
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let out = cli::run_checked(&arg_refs).await?;
     Ok(out.trim().to_string())
@@ -129,29 +111,42 @@ pub async fn run_pack(path: String, opts: RunPackOpts) -> Result<String, String>
 
 #[tauri::command]
 pub async fn push_pack(path: String, registry_ref: String) -> Result<String, String> {
-    let out = cli::run_checked(&["pack", "push", &path, &registry_ref]).await?;
+    let out = cli::run_checked(&["pack", "push", "-f", &path, &registry_ref]).await?;
     Ok(out.trim().to_string())
 }
 
 #[tauri::command]
-pub async fn pull_pack(registry_ref: String) -> Result<String, String> {
-    let out = cli::run_checked(&["pack", "pull", &registry_ref]).await?;
+pub async fn pull_pack(registry_ref: String, output: Option<String>) -> Result<String, String> {
+    let mut args: Vec<String> = vec!["pack".into(), "pull".into()];
+    if let Some(o) = output.as_ref().and_then(trim_opt) {
+        args.push("-o".into());
+        args.push(o);
+    }
+    args.push(registry_ref);
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let out = cli::run_checked(&arg_refs).await?;
     Ok(out.trim().to_string())
 }
 
 #[tauri::command]
-pub async fn prune_packs(dry_run: bool, all: bool) -> Result<String, String> {
+pub async fn prune_packs(dry_run: bool, all: bool, keep: Option<u32>) -> Result<String, String> {
     let mut args: Vec<String> = vec!["pack".into(), "prune".into()];
-    // TODO: verify flag spellings — assuming `--dry-run` and `--all`.
     if dry_run {
         args.push("--dry-run".into());
     }
     if all {
         args.push("--all".into());
+    } else if let Some(k) = keep {
+        args.push("--keep".into());
+        args.push(k.to_string());
     }
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let out = cli::run_checked(&arg_refs).await?;
     Ok(out.trim().to_string())
+}
+
+fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(PathBuf::from)
 }
 
 fn trim_opt(s: &String) -> Option<String> {
