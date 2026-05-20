@@ -257,7 +257,16 @@ function BuildTab() {
   const [error, setError] = useState<string | null>(null);
 
   const pickSmolfile = async () => {
-    const picked = await openDialog({ multiple: false });
+    // Smolfiles are TOML. The conventional name is `Smolfile` (no extension)
+    // at the project root, but any *.toml is also valid. macOS still lets the
+    // user toggle to "All files" via the filter dropdown for the no-ext case.
+    const picked = await openDialog({
+      multiple: false,
+      filters: [
+        { name: "Smolfile (TOML)", extensions: ["toml", "Smolfile"] },
+        { name: "All files", extensions: ["*"] },
+      ],
+    });
     if (typeof picked === "string") setSmolfile(picked);
   };
 
