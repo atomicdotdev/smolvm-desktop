@@ -55,6 +55,13 @@ pub fn run() {
             commands::system::set_smolvm_binary,
             commands::system::get_smolvm_binary,
             commands::config::smolvm_config,
+            commands::pack::list_packs,
+            commands::pack::inspect_pack,
+            commands::pack::create_pack,
+            commands::pack::run_pack,
+            commands::pack::push_pack,
+            commands::pack::pull_pack,
+            commands::pack::prune_packs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

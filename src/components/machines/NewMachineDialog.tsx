@@ -6,6 +6,7 @@ import { useMachinesStore } from "@/hooks/useMachines";
 import type { EnvVar, PortMapping, VolumeMount } from "@/lib/types";
 
 type Mode = "persistent" | "ephemeral";
+type Source = "image" | "pack" | "smolfile";
 
 /** Disable macOS/Safari auto-correct / auto-capitalize / spellcheck on
  * identifier-ish inputs (paths, hostnames, env keys, etc.). */
@@ -30,10 +31,16 @@ export function NewMachineDialog({
   onCreated,
 }: Props) {
   const [mode, setMode] = useState<Mode>("persistent");
+  const [source, setSource] = useState<Source>("image");
+  const [packPath, setPackPath] = useState("");
+  const [smolfilePath, setSmolfilePath] = useState("");
   const [image, setImage] = useState(initialImage ?? "alpine");
 
   useEffect(() => {
-    if (open && initialImage) setImage(initialImage);
+    if (open && initialImage) {
+      setImage(initialImage);
+      setSource("image");
+    }
   }, [open, initialImage]);
 
   useEffect(() => {
@@ -73,6 +80,9 @@ export function NewMachineDialog({
 
   const resetForm = () => {
     setMode("persistent");
+    setSource("image");
+    setPackPath("");
+    setSmolfilePath("");
     setImage(initialImage ?? "alpine");
     setName("");
     setNetwork(true);
@@ -102,6 +112,14 @@ export function NewMachineDialog({
   const submit = async () => {
     if (mode === "ephemeral" && !image.trim()) {
       setError("Image is required for ephemeral machines");
+      return;
+    }
+    if (mode === "persistent" && source === "pack" && !packPath.trim()) {
+      setError("Pack file is required");
+      return;
+    }
+    if (mode === "persistent" && source === "smolfile" && !smolfilePath.trim()) {
+      setError("Smolfile path is required");
       return;
     }
 
@@ -148,7 +166,7 @@ export function NewMachineDialog({
       if (mode === "persistent") {
         await api.createMachine({
           name: name.trim() || null,
-          image: image.trim() || null,
+          image: source === "image" ? image.trim() || null : null,
           cpus: parsedCpus,
           memory_mb: parsedMem,
           network,
@@ -164,6 +182,8 @@ export function NewMachineDialog({
             .filter(Boolean),
           gpu: gpuOrNull,
           gpu_vram_mib: gpuVramOrNull,
+          from_pack: source === "pack" ? packPath.trim() || null : null,
+          smolfile: source === "smolfile" ? smolfilePath.trim() || null : null,
         });
       } else {
         await api.runMachine({
@@ -214,15 +234,79 @@ export function NewMachineDialog({
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <ModeToggle mode={mode} onChange={setMode} />
 
-          <Field label="Image" hint={mode === "persistent" ? "optional (bare VM if empty)" : undefined}>
-            <input
-              {...noAutoCorrect}
-              value={image}
-              onChange={(e) => setImage(e.target.value)}
-              placeholder="alpine, postgres:16-alpine, ghcr.io/org/img"
-              className="input"
-            />
-          </Field>
+          {mode === "persistent" && (
+            <SourceToggle source={source} onChange={setSource} />
+          )}
+
+          {(mode === "ephemeral" || source === "image") && (
+            <Field
+              label="Image"
+              hint={mode === "persistent" ? "optional (bare VM if empty)" : undefined}
+            >
+              <input
+                {...noAutoCorrect}
+                value={image}
+                onChange={(e) => setImage(e.target.value)}
+                placeholder="alpine, postgres:16-alpine, ghcr.io/org/img"
+                className="input"
+              />
+            </Field>
+          )}
+
+          {mode === "persistent" && source === "pack" && (
+            <Field label="Pack file" hint=".smolmachine artifact">
+              <div className="flex gap-1">
+                <input
+                  {...noAutoCorrect}
+                  value={packPath}
+                  onChange={(e) => setPackPath(e.target.value)}
+                  placeholder="/path/to/pack.smolmachine"
+                  className="input flex-1 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const picked = await openDialog({
+                      multiple: false,
+                      filters: [
+                        { name: "SmolVM pack", extensions: ["smolmachine"] },
+                      ],
+                    });
+                    if (typeof picked === "string") setPackPath(picked);
+                  }}
+                  title="Browse"
+                  className="rounded-md border border-border bg-bg-card px-2 text-fg-muted hover:text-fg"
+                >
+                  <FolderOpen className="h-4 w-4" />
+                </button>
+              </div>
+            </Field>
+          )}
+
+          {mode === "persistent" && source === "smolfile" && (
+            <Field label="Smolfile" hint="recipe to materialize the machine">
+              <div className="flex gap-1">
+                <input
+                  {...noAutoCorrect}
+                  value={smolfilePath}
+                  onChange={(e) => setSmolfilePath(e.target.value)}
+                  placeholder="/path/to/smolfile"
+                  className="input flex-1 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const picked = await openDialog({ multiple: false });
+                    if (typeof picked === "string") setSmolfilePath(picked);
+                  }}
+                  title="Browse"
+                  className="rounded-md border border-border bg-bg-card px-2 text-fg-muted hover:text-fg"
+                >
+                  <FolderOpen className="h-4 w-4" />
+                </button>
+              </div>
+            </Field>
+          )}
 
           {mode === "persistent" && (
             <Field label="Name" hint="optional — auto-generated if empty">
@@ -414,6 +498,37 @@ function ModeToggle({
         onClick={() => onChange("ephemeral")}
         title="Ephemeral"
         subtitle="smolvm machine run -d — one-shot"
+      />
+    </div>
+  );
+}
+
+function SourceToggle({
+  source,
+  onChange,
+}: {
+  source: Source;
+  onChange: (s: Source) => void;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-0 rounded-md border border-border p-0.5 text-sm">
+      <ToggleOpt
+        active={source === "image"}
+        onClick={() => onChange("image")}
+        title="Image"
+        subtitle="OCI reference"
+      />
+      <ToggleOpt
+        active={source === "pack"}
+        onClick={() => onChange("pack")}
+        title="Pack file"
+        subtitle=".smolmachine"
+      />
+      <ToggleOpt
+        active={source === "smolfile"}
+        onClick={() => onChange("smolfile")}
+        title="Smolfile"
+        subtitle="recipe"
       />
     </div>
   );

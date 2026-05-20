@@ -77,6 +77,10 @@ export interface MachineConfig {
   workdir: string | null;
   gpu: boolean | null;
   gpu_vram_mib: number | null;
+  /** Path to a .smolmachine pack to import from. */
+  from_pack?: string | null;
+  /** Path to a smolfile to materialize the machine from. */
+  smolfile?: string | null;
 }
 
 export interface MachinePatch {
@@ -96,6 +100,29 @@ export interface MachinePatch {
   remove_env?: string[];
 }
 
+export interface Pack {
+  path: string;
+  name: string;
+  size_bytes: number | null;
+  image: string | null;
+  created: string | null;
+  digest: string | null;
+  raw: unknown;
+}
+
+export interface CreatePackOpts {
+  smolfile?: string | null;
+  machine?: string | null;
+  output?: string | null;
+  name?: string | null;
+}
+
+export interface RunPackOpts {
+  detach: boolean;
+  network: boolean;
+  name?: string | null;
+}
+
 export interface RunConfig {
   image: string;
   cpus: number | null;
@@ -113,7 +140,13 @@ export interface RunConfig {
   gpu_vram_mib: number | null;
 }
 
-export type View = "machines" | "images" | "volumes" | "stats" | "settings";
+export type View =
+  | "machines"
+  | "images"
+  | "volumes"
+  | "packs"
+  | "stats"
+  | "settings";
 
 /**
  * One cached layer / image record reported by `smolvm machine images --json`.
