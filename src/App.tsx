@@ -74,9 +74,9 @@ export default function App() {
     [selectedMachine],
   );
 
-  const gotoMachinesForImage = (reference: string) => {
-    setMachineFilterImage(reference);
-    setSelectedMachine(null);
+  const gotoMachineByName = (name: string) => {
+    setMachineFilterImage(null);
+    setSelectedMachine(name);
     setView("machines");
   };
 
@@ -111,7 +111,7 @@ export default function App() {
               onClearFilter={() => setMachineFilterImage(null)}
             />
           )}
-          {view === "images" && <ImagesView onViewMachines={gotoMachinesForImage} />}
+          {view === "images" && <ImagesView onViewMachines={gotoMachineByName} />}
           {view === "volumes" && (
             <VolumesView
               onViewMachines={(name) => {

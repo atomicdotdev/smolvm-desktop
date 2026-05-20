@@ -1,12 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   HealthStatus,
-  ImageSummary,
+  ImageEntry,
   Machine,
   MachineConfig,
   MachineInspect,
   MachinePatch,
   MachineStats,
+  PruneResult,
   RunConfig,
   SmolvmBinary,
   SystemInfo,
@@ -25,7 +26,10 @@ export const api = {
   updateMachine: (name: string, patch: MachinePatch) =>
     invoke<Machine>("update_machine", { name, patch }),
   runMachine: (config: RunConfig) => invoke<string>("run_machine", { config }),
-  listImages: () => invoke<ImageSummary[]>("list_images"),
+  listMachineImages: (name: string) =>
+    invoke<ImageEntry[]>("list_machine_images", { name }),
+  pruneMachineImages: (name: string, all: boolean, dryRun: boolean) =>
+    invoke<PruneResult>("prune_machine_images", { name, all, dryRun }),
   machineStats: (name: string) => invoke<MachineStats>("machine_stats", { name }),
   systemStats: () => invoke<SystemStats>("system_stats"),
   smolvmHealth: () => invoke<HealthStatus>("smolvm_health"),
