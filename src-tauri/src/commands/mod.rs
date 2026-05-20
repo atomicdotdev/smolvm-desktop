@@ -4,6 +4,7 @@ pub mod files;
 pub mod images;
 pub mod logs;
 pub mod machines;
+pub mod pack;
 pub mod stats;
 pub mod system;
 pub mod tasks;

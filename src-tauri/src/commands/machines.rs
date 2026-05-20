@@ -66,7 +66,19 @@ pub async fn inspect_machine(name: String) -> Result<MachineInspect, String> {
 pub async fn create_machine(config: MachineConfig) -> Result<Machine, String> {
     let mut args: Vec<String> = vec!["machine".into(), "create".into()];
 
-    if let Some(image) = &config.image {
+    // Import sources take precedence over `--image`. smolvm v0.5.13 added
+    // `--from <path>` for packed `.smolmachine` artifacts (PR #135) and
+    // `--smolfile <path>` to materialize from a smolfile.
+    // TODO: verify flag spellings against the installed smolvm version.
+    let from_pack = config.from_pack.as_ref().and_then(trim_to_some);
+    let smolfile = config.smolfile.as_ref().and_then(trim_to_some);
+    if let Some(from) = from_pack {
+        args.push("--from".into());
+        args.push(from);
+    } else if let Some(sf) = smolfile {
+        args.push("--smolfile".into());
+        args.push(sf);
+    } else if let Some(image) = &config.image {
         args.push("--image".into());
         args.push(image.clone());
     }

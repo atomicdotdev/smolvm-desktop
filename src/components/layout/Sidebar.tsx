@@ -1,4 +1,12 @@
-import { BarChart3, HardDrive, Layers, Server, Settings, Zap } from "lucide-react";
+import {
+  BarChart3,
+  HardDrive,
+  Layers,
+  Package,
+  Server,
+  Settings,
+  Zap,
+} from "lucide-react";
 import type { View } from "@/lib/types";
 
 interface NavItem {
@@ -11,6 +19,7 @@ const NAV: NavItem[] = [
   { id: "machines", label: "Machines", icon: Server },
   { id: "images", label: "Images", icon: Layers },
   { id: "volumes", label: "Volumes", icon: HardDrive },
+  { id: "packs", label: "Packs", icon: Package },
   { id: "stats", label: "Stats", icon: BarChart3 },
 ];
 

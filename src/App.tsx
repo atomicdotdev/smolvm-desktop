@@ -10,6 +10,7 @@ import { useNewMachineDialog } from "@/hooks/useNewMachineDialog";
 import { useShortcuts } from "@/hooks/useShortcuts";
 import { ImagesView } from "@/components/images/ImagesView";
 import { VolumesView } from "@/components/volumes/VolumesView";
+import { PacksView } from "@/components/packs/PacksView";
 import { SystemDashboard } from "@/components/stats/SystemDashboard";
 import { SettingsView, getPollInterval, loadBinaryOverride } from "@/components/settings/SettingsView";
 import { api } from "@/lib/invoke";
@@ -56,7 +57,8 @@ export default function App() {
       "mod+1": () => handleNav("machines"),
       "mod+2": () => handleNav("images"),
       "mod+3": () => handleNav("volumes"),
-      "mod+4": () => handleNav("stats"),
+      "mod+4": () => handleNav("packs"),
+      "mod+5": () => handleNav("stats"),
       "mod+,": () => handleNav("settings"),
       "mod+n": (e) => {
         e.preventDefault();
@@ -120,6 +122,9 @@ export default function App() {
               }}
             />
           )}
+          {view === "packs" && (
+            <PacksView onOpenSettings={() => handleNav("settings")} />
+          )}
           {view === "stats" && <SystemDashboard />}
           {view === "settings" && <SettingsView />}
         </main>
@@ -148,7 +153,8 @@ const SHORTCUTS: [string, string][] = [
   ["⌘/Ctrl + 1", "Machines"],
   ["⌘/Ctrl + 2", "Images"],
   ["⌘/Ctrl + 3", "Volumes"],
-  ["⌘/Ctrl + 4", "Stats"],
+  ["⌘/Ctrl + 4", "Packs"],
+  ["⌘/Ctrl + 5", "Stats"],
   ["⌘/Ctrl + ,", "Settings"],
   ["⌘/Ctrl + N", "New machine"],
   ["⌘/Ctrl + R", "Refresh machines"],
