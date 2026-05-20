@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Archive,
+  ChevronDown,
   Download,
   FolderOpen,
   Hammer,
@@ -606,22 +607,25 @@ function VmPicker({
   const missing = value && !valueInList;
 
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="input w-full"
-    >
-      <option value="">Select a stopped VM…</option>
-      {missing && (
-        <option value={value}>{value} (not stopped — refresh)</option>
-      )}
-      {stopped.map((m) => (
-        <option key={m.name} value={m.name}>
-          {m.name}
-          {m.image ? ` · ${m.image}` : ""}
-        </option>
-      ))}
-    </select>
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="input w-full cursor-pointer appearance-none pr-9"
+      >
+        <option value="">Select a stopped VM…</option>
+        {missing && (
+          <option value={value}>{value} (not stopped — refresh)</option>
+        )}
+        {stopped.map((m) => (
+          <option key={m.name} value={m.name}>
+            {m.name}
+            {m.image ? ` · ${m.image}` : ""}
+          </option>
+        ))}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted" />
+    </div>
   );
 }
 
