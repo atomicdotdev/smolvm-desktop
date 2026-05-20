@@ -61,6 +61,8 @@ export function NewMachineDialog({
   const [envVars, setEnvVars] = useState<EnvVar[]>([]);
   const [allowHosts, setAllowHosts] = useState<string[]>([]);
   const [workdir, setWorkdir] = useState("");
+  const [gpu, setGpu] = useState(false);
+  const [gpuVram, setGpuVram] = useState("");
   const [advanced, setAdvanced] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +87,8 @@ export function NewMachineDialog({
     setEnvVars([]);
     setAllowHosts([]);
     setWorkdir("");
+    setGpu(false);
+    setGpuVram("");
     setAdvanced(false);
     setError(null);
     setSubmitting(false);
@@ -128,6 +132,17 @@ export function NewMachineDialog({
       .map((e) => ({ ...e, key: e.key.toUpperCase() }));
     const validAllowHosts = allowHosts.map((h) => h.trim()).filter(Boolean);
     const workdirOrNull = workdir.trim() || null;
+    const parsedGpuVram = gpuVram.trim() ? Number(gpuVram) : null;
+    if (
+      parsedGpuVram !== null &&
+      (!Number.isFinite(parsedGpuVram) || parsedGpuVram <= 0)
+    ) {
+      setError("GPU VRAM must be a positive integer (MiB)");
+      setSubmitting(false);
+      return;
+    }
+    const gpuOrNull = gpu ? true : null;
+    const gpuVramOrNull = gpu ? parsedGpuVram : null;
 
     try {
       if (mode === "persistent") {
@@ -147,6 +162,8 @@ export function NewMachineDialog({
             .split("\n")
             .map((l) => l.trim())
             .filter(Boolean),
+          gpu: gpuOrNull,
+          gpu_vram_mib: gpuVramOrNull,
         });
       } else {
         await api.runMachine({
@@ -162,6 +179,8 @@ export function NewMachineDialog({
           allow_hosts: validAllowHosts,
           workdir: workdirOrNull,
           command: command.trim() || null,
+          gpu: gpuOrNull,
+          gpu_vram_mib: gpuVramOrNull,
         });
       }
       await refresh();
@@ -321,6 +340,30 @@ export function NewMachineDialog({
                   className="input font-mono"
                 />
               </Field>
+
+              <div className="space-y-2 rounded-md border border-border bg-bg/40 p-3">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm font-medium">GPU acceleration</span>
+                  <span className="text-xs text-fg-muted">
+                    requires host support; upstream will error if unavailable
+                  </span>
+                </div>
+                <Checkbox
+                  checked={gpu}
+                  onChange={setGpu}
+                  label="Enable GPU passthrough (--gpu)"
+                />
+                <Field label="VRAM (MiB)" hint="optional — leave blank for auto">
+                  <input
+                    value={gpuVram}
+                    onChange={(e) => setGpuVram(e.target.value)}
+                    placeholder="auto"
+                    inputMode="numeric"
+                    disabled={!gpu}
+                    className="input disabled:opacity-50"
+                  />
+                </Field>
+              </div>
             </div>
           )}
 

@@ -118,6 +118,10 @@ pub struct MachineConfig {
     pub init_commands: Vec<String>,
     #[serde(default)]
     pub workdir: Option<String>,
+    #[serde(default)]
+    pub gpu: Option<bool>,
+    #[serde(default)]
+    pub gpu_vram_mib: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -145,4 +149,8 @@ pub struct RunConfig {
     pub workdir: Option<String>,
     #[serde(default)]
     pub command: Option<String>,
+    #[serde(default)]
+    pub gpu: Option<bool>,
+    #[serde(default)]
+    pub gpu_vram_mib: Option<u32>,
 }
