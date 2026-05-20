@@ -1,0 +1,13 @@
+node_modules
+dist
+dist-ssr
+*.local
+
+# Rust
+src-tauri/target
+src-tauri/gen/schemas
+
+# Editor
+.vscode
+.idea
+.DS_Store
