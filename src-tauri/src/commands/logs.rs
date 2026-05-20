@@ -33,7 +33,10 @@ pub async fn machine_data_dir(name: String) -> Result<String, String> {
 
 /// Read a snapshot of the log. `tail` caps the number of most-recent lines returned.
 #[tauri::command]
-pub async fn machine_log_snapshot(name: String, tail: Option<usize>) -> Result<Vec<String>, String> {
+pub async fn machine_log_snapshot(
+    name: String,
+    tail: Option<usize>,
+) -> Result<Vec<String>, String> {
     let dir = data_dir(&name).await?;
     let path = dir.join("agent-console.log");
     if !path.exists() {

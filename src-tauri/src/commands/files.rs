@@ -139,11 +139,7 @@ pub async fn write_file(name: String, path: String, content: String) -> Result<(
 
 /// Copy a host file into the VM.
 #[tauri::command]
-pub async fn upload_file(
-    name: String,
-    host_path: String,
-    vm_path: String,
-) -> Result<(), String> {
+pub async fn upload_file(name: String, host_path: String, vm_path: String) -> Result<(), String> {
     let dst = format!("{name}:{vm_path}");
     cli::run_checked(&["machine", "cp", &host_path, &dst]).await?;
     Ok(())
@@ -151,11 +147,7 @@ pub async fn upload_file(
 
 /// Copy a file from the VM to the host.
 #[tauri::command]
-pub async fn download_file(
-    name: String,
-    vm_path: String,
-    host_path: String,
-) -> Result<(), String> {
+pub async fn download_file(name: String, vm_path: String, host_path: String) -> Result<(), String> {
     let src = format!("{name}:{vm_path}");
     cli::run_checked(&["machine", "cp", &src, &host_path]).await?;
     Ok(())
@@ -171,11 +163,7 @@ fn parse_stat_line(line: &str) -> Option<FileEntry> {
     let kind = parts[1];
     let size: u64 = parts[2].parse().ok()?;
     let modified: u64 = parts[3].parse().ok()?;
-    let name = path
-        .rsplit('/')
-        .next()
-        .unwrap_or(&path)
-        .to_string();
+    let name = path.rsplit('/').next().unwrap_or(&path).to_string();
     let is_dir = kind.contains("directory");
     Some(FileEntry {
         name,

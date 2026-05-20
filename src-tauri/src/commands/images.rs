@@ -140,10 +140,7 @@ fn entry_from_value(v: &Value) -> ImageEntry {
     }
 }
 
-fn string_field(
-    obj: &serde_json::Map<String, Value>,
-    keys: &[&str],
-) -> Option<String> {
+fn string_field(obj: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<String> {
     for k in keys {
         if let Some(s) = obj.get(*k).and_then(Value::as_str) {
             if !s.is_empty() {
@@ -183,10 +180,8 @@ fn parse_prune_output(raw: &str, dry_run: bool, all: bool) -> PruneResult {
     // If smolvm gives us a JSON object, prefer that.
     if let Ok(v) = serde_json::from_str::<Value>(raw.trim()) {
         if let Some(obj) = v.as_object() {
-            result.removed_count = u64_field(
-                obj,
-                &["removed", "removed_count", "removedCount", "count"],
-            );
+            result.removed_count =
+                u64_field(obj, &["removed", "removed_count", "removedCount", "count"]);
             result.reclaimed_bytes = u64_field(
                 obj,
                 &[

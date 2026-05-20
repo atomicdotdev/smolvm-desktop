@@ -73,10 +73,7 @@ fn machine_from_value(v: &Value) -> Option<Machine> {
     })
 }
 
-fn string_field(
-    obj: &serde_json::Map<String, Value>,
-    keys: &[&str],
-) -> Option<String> {
+fn string_field(obj: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<String> {
     for k in keys {
         if let Some(Value::String(s)) = obj.get(*k) {
             return Some(s.clone());
@@ -122,9 +119,7 @@ pub struct MachineExtras {
 ///   Env: FOO=1
 ///   Created: 1700000000
 /// ```
-pub fn parse_machine_extras(
-    raw: &str,
-) -> std::collections::HashMap<String, MachineExtras> {
+pub fn parse_machine_extras(raw: &str) -> std::collections::HashMap<String, MachineExtras> {
     let mut out: std::collections::HashMap<String, MachineExtras> =
         std::collections::HashMap::new();
     let mut current: Option<String> = None;
@@ -133,17 +128,16 @@ pub fn parse_machine_extras(
         let indented = line.starts_with(' ') || line.starts_with('\t');
         if !indented {
             let trimmed = line.trim_end();
-            if trimmed.is_empty()
-                || trimmed.starts_with('-')
-                || trimmed.starts_with("NAME")
-            {
+            if trimmed.is_empty() || trimmed.starts_with('-') || trimmed.starts_with("NAME") {
                 current = None;
                 continue;
             }
             current = trimmed.split_whitespace().next().map(str::to_string);
             continue;
         }
-        let Some(name) = current.as_ref() else { continue };
+        let Some(name) = current.as_ref() else {
+            continue;
+        };
         let body = line.trim_start();
         if let Some(_rest) = body.strip_prefix("Env:") {
             out.entry(name.clone()).or_default().env_count += 1;

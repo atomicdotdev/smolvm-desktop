@@ -93,8 +93,7 @@ fn build_menu(
             ("stats", "Stats"),
         ];
         for (name, status) in machines {
-            let is_running =
-                matches!(status, MachineStatus::Running | MachineStatus::Starting);
+            let is_running = matches!(status, MachineStatus::Running | MachineStatus::Starting);
             let dot = if is_running { "●" } else { "○" };
             let machine_menu = Submenu::with_id(
                 app,
@@ -183,10 +182,7 @@ fn handle_menu_event(app: &AppHandle, event: MenuEvent) {
         other => {
             if let Some(name) = other.strip_prefix("machine:focus:") {
                 show_main_window(app);
-                let _ = app.emit(
-                    "tray:focus-machine",
-                    serde_json::json!({ "name": name }),
-                );
+                let _ = app.emit("tray:focus-machine", serde_json::json!({ "name": name }));
             } else if let Some(rest) = other.strip_prefix("machine:tab:") {
                 if let Some((tab, name)) = rest.split_once(':') {
                     show_main_window(app);
@@ -225,9 +221,7 @@ pub fn show_main_window(app: &AppHandle) {
 fn show_about(app: &AppHandle) {
     let version = app.package_info().version.to_string();
     app.dialog()
-        .message(format!(
-            "SmolVM Desktop v{version}\nLocal VM management UI"
-        ))
+        .message(format!("SmolVM Desktop v{version}\nLocal VM management UI"))
         .title("About SmolVM Desktop")
         .kind(MessageDialogKind::Info)
         .show(|_| {});

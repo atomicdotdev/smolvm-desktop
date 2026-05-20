@@ -108,7 +108,11 @@ pub fn set_config(
 fn blank_to_none(s: Option<String>) -> Option<String> {
     s.and_then(|s| {
         let t = s.trim().to_string();
-        if t.is_empty() { None } else { Some(t) }
+        if t.is_empty() {
+            None
+        } else {
+            Some(t)
+        }
     })
 }
 

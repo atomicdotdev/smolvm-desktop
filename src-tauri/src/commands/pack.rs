@@ -156,5 +156,9 @@ pub async fn prune_packs(dry_run: bool, all: bool) -> Result<String, String> {
 
 fn trim_opt(s: &String) -> Option<String> {
     let t = s.trim();
-    if t.is_empty() { None } else { Some(t.to_string()) }
+    if t.is_empty() {
+        None
+    } else {
+        Some(t.to_string())
+    }
 }

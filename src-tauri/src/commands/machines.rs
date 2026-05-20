@@ -143,10 +143,7 @@ pub async fn create_machine(config: MachineConfig) -> Result<Machine, String> {
     cli::run_checked(&arg_refs).await?;
 
     // Return the created machine by looking it up
-    let created_name = config
-        .name
-        .clone()
-        .unwrap_or_else(|| "default".to_string());
+    let created_name = config.name.clone().unwrap_or_else(|| "default".to_string());
     refetch_machine(&created_name).await
 }
 
@@ -340,7 +337,11 @@ async fn refetch_machine(name: &str) -> Result<Machine, String> {
 
 fn trim_to_some(s: &String) -> Option<String> {
     let t = s.trim();
-    if t.is_empty() { None } else { Some(t.to_string()) }
+    if t.is_empty() {
+        None
+    } else {
+        Some(t.to_string())
+    }
 }
 
 /// Upper-cases and validates an env var name. Returns `Some((KEY, value))` if

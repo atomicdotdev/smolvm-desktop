@@ -47,10 +47,7 @@ pub async fn run_task(
     }
 
     // Pre-flight check: is the VM reachable? Mirror exec_start's behavior.
-    let status = cli::run(&[
-        "machine", "status", "-n", &machine,
-    ])
-    .await?;
+    let status = cli::run(&["machine", "status", "-n", &machine]).await?;
     let status_text = format!("{}{}", status.stdout, status.stderr);
     if !status_text.contains("running") {
         return Err(format!(
@@ -95,10 +92,12 @@ pub async fn run_task(
     let stderr = child.stderr.take().ok_or("no stderr pipe")?;
 
     let (kill_tx, kill_rx) = oneshot::channel::<()>();
-    tasks()
-        .lock()
-        .unwrap()
-        .insert(task_id.clone(), TaskHandle { kill: Some(kill_tx) });
+    tasks().lock().unwrap().insert(
+        task_id.clone(),
+        TaskHandle {
+            kill: Some(kill_tx),
+        },
+    );
 
     spawn_stream_reader(app.clone(), task_id.clone(), stdout, "stdout");
     spawn_stream_reader(app.clone(), task_id.clone(), stderr, "stderr");
@@ -151,7 +150,11 @@ where
 
 #[tauri::command]
 pub async fn stop_task(task_id: String) -> Result<(), String> {
-    let handle = tasks().lock().unwrap().get_mut(&task_id).and_then(|h| h.kill.take());
+    let handle = tasks()
+        .lock()
+        .unwrap()
+        .get_mut(&task_id)
+        .and_then(|h| h.kill.take());
     if let Some(tx) = handle {
         let _ = tx.send(());
     }
