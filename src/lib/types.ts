@@ -75,6 +75,8 @@ export interface MachineConfig {
   allow_hosts: string[];
   init_commands: string[];
   workdir: string | null;
+  gpu: boolean | null;
+  gpu_vram_mib: number | null;
 }
 
 export interface RunConfig {
@@ -90,6 +92,8 @@ export interface RunConfig {
   allow_hosts: string[];
   workdir: string | null;
   command: string | null;
+  gpu: boolean | null;
+  gpu_vram_mib: number | null;
 }
 
 export type View = "machines" | "images" | "volumes" | "stats" | "settings";

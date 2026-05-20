@@ -113,6 +113,13 @@ pub async fn create_machine(config: MachineConfig) -> Result<Machine, String> {
         args.push("--workdir".into());
         args.push(workdir);
     }
+    if config.gpu.unwrap_or(false) {
+        args.push("--gpu".into());
+    }
+    if let Some(vram) = config.gpu_vram_mib {
+        args.push("--gpu-vram".into());
+        args.push(vram.to_string());
+    }
     // Positional NAME last, optional
     if let Some(name) = &config.name {
         args.push(name.clone());
@@ -179,6 +186,13 @@ pub async fn run_machine(config: RunConfig) -> Result<String, String> {
     if let Some(workdir) = config.workdir.as_ref().and_then(trim_to_some) {
         args.push("--workdir".into());
         args.push(workdir);
+    }
+    if config.gpu.unwrap_or(false) {
+        args.push("--gpu".into());
+    }
+    if let Some(vram) = config.gpu_vram_mib {
+        args.push("--gpu-vram".into());
+        args.push(vram.to_string());
     }
     if let Some(cmd) = &config.command {
         if !cmd.trim().is_empty() {
