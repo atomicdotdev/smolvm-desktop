@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FolderOpen, Plus, X } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api } from "@/lib/invoke";
@@ -111,17 +111,16 @@ function portSpec(p: PortMapping): string {
 }
 
 export function EditMachineDialog({ open, machine, onClose, onUpdated }: Props) {
-  // Snapshot of original values used to compute the diff on submit.
-  const original = useMemo(
-    () => ({
-      cpus: machine.cpus,
-      memory_mb: machine.memory_mb,
-      network: machine.network,
-      ports: machine.ports,
-      mounts: machine.mounts,
-    }),
-    [machine],
-  );
+  // Snapshot of original values captured at open time. Held in a ref so
+  // store polling (which replaces the `machine` prop reference on each
+  // refresh) doesn't clobber user edits or shift the diff baseline.
+  const original = useRef({
+    cpus: machine.cpus,
+    memory_mb: machine.memory_mb,
+    network: machine.network,
+    ports: machine.ports,
+    mounts: machine.mounts,
+  });
 
   const [cpus, setCpus] = useState("");
   const [mem, setMem] = useState("");
@@ -149,11 +148,21 @@ export function EditMachineDialog({ open, machine, onClose, onUpdated }: Props) 
 
   const refresh = useMachinesStore((s) => s.refresh);
 
-  // Pre-populate from machine + inspect raw on open.
+  // Pre-populate from machine + inspect raw on open. Keyed on `machine.name`
+  // (stable) rather than the whole `machine` object — the machines store
+  // polls and replaces the reference every refresh, and depending on the
+  // object would reset the form mid-edit.
   useEffect(() => {
     if (!open) return;
     let alive = true;
 
+    original.current = {
+      cpus: machine.cpus,
+      memory_mb: machine.memory_mb,
+      network: machine.network,
+      ports: machine.ports,
+      mounts: machine.mounts,
+    };
     setCpus(machine.cpus !== null ? String(machine.cpus) : "");
     setMem(machine.memory_mb !== null ? String(machine.memory_mb) : "");
     setNetwork(machine.network);
@@ -197,7 +206,7 @@ export function EditMachineDialog({ open, machine, onClose, onUpdated }: Props) 
     return () => {
       alive = false;
     };
-  }, [open, machine]);
+  }, [open, machine.name]);
 
   // Esc to close.
   useEffect(() => {
@@ -218,12 +227,12 @@ export function EditMachineDialog({ open, machine, onClose, onUpdated }: Props) 
     const patch: MachinePatch = {};
 
     const parsedCpus = cpus.trim() ? Number(cpus) : null;
-    if (parsedCpus !== original.cpus) patch.cpus = parsedCpus;
+    if (parsedCpus !== original.current.cpus) patch.cpus = parsedCpus;
 
     const parsedMem = mem.trim() ? Number(mem) : null;
-    if (parsedMem !== original.memory_mb) patch.memory_mb = parsedMem;
+    if (parsedMem !== original.current.memory_mb) patch.memory_mb = parsedMem;
 
-    if (network !== original.network) patch.network = network;
+    if (network !== original.current.network) patch.network = network;
 
     const wdTrim = workdir.trim();
     if (wdTrim !== origWorkdir.trim() && wdTrim) patch.workdir = wdTrim;
@@ -244,7 +253,7 @@ export function EditMachineDialog({ open, machine, onClose, onUpdated }: Props) 
     }
 
     // Volumes: diff by spec string.
-    const origVolSpecs = new Set(original.mounts.map(volumeSpec));
+    const origVolSpecs = new Set(original.current.mounts.map(volumeSpec));
     const currVolSpecs = new Set(volumes.map(volumeSpec));
     const addVols = volumes.filter(
       (v) =>
@@ -252,14 +261,14 @@ export function EditMachineDialog({ open, machine, onClose, onUpdated }: Props) 
         v.guest_path.trim() &&
         !origVolSpecs.has(volumeSpec(v)),
     );
-    const removeVols = original.mounts
+    const removeVols = original.current.mounts
       .filter((v) => !currVolSpecs.has(volumeSpec(v)))
       .map(volumeSpec);
     if (addVols.length) patch.add_volumes = addVols;
     if (removeVols.length) patch.remove_volumes = removeVols;
 
     // Ports: diff by spec string.
-    const origPortSpecs = new Set(original.ports.map(portSpec));
+    const origPortSpecs = new Set(original.current.ports.map(portSpec));
     const currPortSpecs = new Set(ports.map(portSpec));
     const validPorts = ports.filter(
       (p) =>
@@ -269,7 +278,7 @@ export function EditMachineDialog({ open, machine, onClose, onUpdated }: Props) 
         p.guest > 0,
     );
     const addPorts = validPorts.filter((p) => !origPortSpecs.has(portSpec(p)));
-    const removePorts = original.ports
+    const removePorts = original.current.ports
       .filter((p) => !currPortSpecs.has(portSpec(p)))
       .map(portSpec);
     if (addPorts.length) patch.add_ports = addPorts;
