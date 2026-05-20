@@ -3,6 +3,9 @@ dist
 dist-ssr
 *.local
 
+# Local planning docs
+.plans
+
 # Rust
 src-tauri/target
 src-tauri/gen/schemas
