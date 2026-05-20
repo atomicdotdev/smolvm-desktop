@@ -112,6 +112,15 @@ function MachineImagePanel({
   const [error, setError] = useState<string | null>(null);
   const [prune, setPrune] = useState<PruneSession | null>(null);
 
+  // smolvm refuses to prune layers (or `--all`) while the machine is running.
+  // Disable the buttons in that case so we don't show a guaranteed-failing UI.
+  const running = useMachinesStore(
+    (s) => s.machines.find((m) => m.name === name)?.status === "running",
+  );
+  const pruneDisabledReason = running
+    ? "Stop the machine before pruning."
+    : undefined;
+
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
@@ -171,14 +180,18 @@ function MachineImagePanel({
           </button>
           <button
             onClick={() => setPrune({ name, all: false, phase: "confirm" })}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-card px-3 py-1.5 text-sm hover:bg-bg-card/70"
+            disabled={running}
+            title={pruneDisabledReason}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-card px-3 py-1.5 text-sm hover:bg-bg-card/70 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-bg-card"
           >
             <Trash2 className="h-4 w-4" />
             Prune
           </button>
           <button
             onClick={() => setPrune({ name, all: true, phase: "confirm" })}
-            className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90"
+            disabled={running}
+            title={pruneDisabledReason}
+            className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-accent"
           >
             <Trash2 className="h-4 w-4" />
             Prune all unused
