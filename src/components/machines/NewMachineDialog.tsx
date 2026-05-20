@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FolderOpen, Plus, X } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { defaultPackDir, defaultSmolfileDir } from "@/lib/paths";
 import { api } from "@/lib/invoke";
 import { useMachinesStore } from "@/hooks/useMachines";
 import type { EnvVar, PortMapping, VolumeMount } from "@/lib/types";
@@ -271,6 +272,7 @@ export function NewMachineDialog({
                       filters: [
                         { name: "SmolVM pack", extensions: ["smolmachine"] },
                       ],
+                      defaultPath: await defaultPackDir(),
                     });
                     if (typeof picked === "string") setPackPath(picked);
                   }}
@@ -296,7 +298,14 @@ export function NewMachineDialog({
                 <button
                   type="button"
                   onClick={async () => {
-                    const picked = await openDialog({ multiple: false });
+                    const picked = await openDialog({
+                      multiple: false,
+                      filters: [
+                        { name: "Smolfile (TOML)", extensions: ["toml", "Smolfile"] },
+                        { name: "All files", extensions: ["*"] },
+                      ],
+                      defaultPath: await defaultSmolfileDir(),
+                    });
                     if (typeof picked === "string") setSmolfilePath(picked);
                   }}
                   title="Browse"

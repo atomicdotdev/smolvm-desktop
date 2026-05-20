@@ -12,8 +12,10 @@ import {
   Upload,
 } from "lucide-react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { join } from "@tauri-apps/api/path";
 import { api } from "@/lib/invoke";
 import type { Pack } from "@/lib/types";
+import { defaultPackDir, defaultSmolfileDir } from "@/lib/paths";
 import { useMachinesStore } from "@/hooks/useMachines";
 
 type Tab = "local" | "build" | "transport";
@@ -115,6 +117,7 @@ function LocalTab() {
     const path = await openDialog({
       multiple: false,
       filters: [{ name: "SmolVM pack", extensions: ["smolmachine"] }],
+      defaultPath: await defaultPackDir(),
     });
     if (typeof path !== "string") return;
     try {
@@ -266,6 +269,7 @@ function BuildTab() {
         { name: "Smolfile (TOML)", extensions: ["toml", "Smolfile"] },
         { name: "All files", extensions: ["*"] },
       ],
+      defaultPath: await defaultSmolfileDir(),
     });
     if (typeof picked === "string") setSmolfile(picked);
   };
@@ -273,7 +277,7 @@ function BuildTab() {
   const pickOutput = async () => {
     const picked = await saveDialog({
       filters: [{ name: "SmolVM pack", extensions: ["smolmachine"] }],
-      defaultPath: "machine.smolmachine",
+      defaultPath: await join(await defaultPackDir(), "machine.smolmachine"),
     });
     if (typeof picked === "string") setOutput(picked);
   };
@@ -423,6 +427,7 @@ function TransportTab({ onOpenSettings }: { onOpenSettings: () => void }) {
     const picked = await openDialog({
       multiple: false,
       filters: [{ name: "SmolVM pack", extensions: ["smolmachine"] }],
+      defaultPath: await defaultPackDir(),
     });
     if (typeof picked === "string") setPushPath(picked);
   };
