@@ -1,6 +1,8 @@
 use crate::commands::exec;
 use crate::smolvm::{cli, parser};
-use crate::types::{Machine, MachineConfig, MachineInspect, RunConfig};
+use crate::types::{
+    Machine, MachineConfig, MachineInspect, MachinePatch, MachineStatus, RunConfig,
+};
 
 #[tauri::command]
 pub async fn list_machines() -> Result<Vec<Machine>, String> {
@@ -127,6 +129,115 @@ pub async fn create_machine(config: MachineConfig) -> Result<Machine, String> {
         .clone()
         .unwrap_or_else(|| "default".to_string());
     refetch_machine(&created_name).await
+}
+
+#[tauri::command]
+pub async fn update_machine(name: String, patch: MachinePatch) -> Result<Machine, String> {
+    // Pre-check: smolvm requires the VM to be stopped. Surface a clear
+    // message instead of letting the upstream error leak through.
+    let machines = list_machines().await?;
+    let current = machines
+        .iter()
+        .find(|m| m.name == name)
+        .ok_or_else(|| format!("machine `{name}` not found"))?;
+    if matches!(
+        current.status,
+        MachineStatus::Running | MachineStatus::Starting
+    ) {
+        return Err(format!(
+            "machine `{name}` is running — stop it before editing"
+        ));
+    }
+
+    let args = build_update_args(&name, &patch);
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    cli::run_checked(&arg_refs).await?;
+
+    refetch_machine(&name).await
+}
+
+/// Build the `smolvm machine update <NAME>` argv. Only fields explicitly
+/// set in the patch are emitted; everything else is left for upstream to
+/// preserve.
+fn build_update_args(name: &str, patch: &MachinePatch) -> Vec<String> {
+    let mut args: Vec<String> = vec!["machine".into(), "update".into()];
+
+    if let Some(cpus) = patch.cpus {
+        args.push("--cpus".into());
+        args.push(cpus.to_string());
+    }
+    if let Some(mem) = patch.memory_mb {
+        args.push("--mem".into());
+        args.push(mem.to_string());
+    }
+    match patch.network {
+        Some(true) => args.push("--net".into()),
+        Some(false) => args.push("--no-net".into()),
+        None => {}
+    }
+    if let Some(workdir) = patch.workdir.as_ref() {
+        let t = workdir.trim();
+        if !t.is_empty() {
+            args.push("--workdir".into());
+            args.push(t.to_string());
+        }
+    }
+    match patch.gpu {
+        Some(true) => args.push("--gpu".into()),
+        Some(false) => args.push("--no-gpu".into()),
+        None => {}
+    }
+    if let Some(vram) = patch.gpu_vram_mib {
+        args.push("--gpu-vram".into());
+        args.push(vram.to_string());
+    }
+    if let Some(storage) = patch.storage_gib {
+        args.push("--storage".into());
+        args.push(storage.to_string());
+    }
+    if let Some(overlay) = patch.overlay_gib {
+        args.push("--overlay".into());
+        args.push(overlay.to_string());
+    }
+
+    for vol in &patch.add_volumes {
+        args.push("--volume".into());
+        args.push(format_volume(vol));
+    }
+    for v in &patch.remove_volumes {
+        let t = v.trim();
+        if !t.is_empty() {
+            args.push("--remove-volume".into());
+            args.push(t.to_string());
+        }
+    }
+    for p in &patch.add_ports {
+        args.push("--port".into());
+        args.push(format!("{}:{}", p.host, p.guest));
+    }
+    for p in &patch.remove_ports {
+        let t = p.trim();
+        if !t.is_empty() {
+            args.push("--remove-port".into());
+            args.push(t.to_string());
+        }
+    }
+    for env in &patch.add_env {
+        if let Some((k, v)) = normalize_env(&env.key, &env.value) {
+            args.push("--env".into());
+            args.push(format!("{k}={v}"));
+        }
+    }
+    for k in &patch.remove_env {
+        let key = k.trim().to_uppercase();
+        if !key.is_empty() {
+            args.push("--remove-env".into());
+            args.push(key);
+        }
+    }
+
+    args.push(name.to_string());
+    args
 }
 
 #[tauri::command]

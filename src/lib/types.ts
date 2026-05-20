@@ -77,6 +77,23 @@ export interface MachineConfig {
   workdir: string | null;
 }
 
+export interface MachinePatch {
+  cpus?: number | null;
+  memory_mb?: number | null;
+  network?: boolean | null;
+  workdir?: string | null;
+  gpu?: boolean | null;
+  gpu_vram_mib?: number | null;
+  storage_gib?: number | null;
+  overlay_gib?: number | null;
+  add_volumes?: VolumeMount[];
+  remove_volumes?: string[];
+  add_ports?: PortMapping[];
+  remove_ports?: string[];
+  add_env?: EnvVar[];
+  remove_env?: string[];
+}
+
 export interface RunConfig {
   image: string;
   cpus: number | null;

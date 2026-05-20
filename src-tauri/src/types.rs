@@ -120,6 +120,47 @@ pub struct MachineConfig {
     pub workdir: Option<String>,
 }
 
+/// Patch sent to `machine update`. Only fields with `Some(_)` (or non-empty
+/// removal vectors) are translated into CLI flags — the rest are left
+/// untouched on the existing machine config.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MachinePatch {
+    #[serde(default)]
+    pub cpus: Option<u32>,
+    #[serde(default)]
+    pub memory_mb: Option<u32>,
+    #[serde(default)]
+    pub network: Option<bool>,
+    #[serde(default)]
+    pub workdir: Option<String>,
+    #[serde(default)]
+    pub gpu: Option<bool>,
+    #[serde(default)]
+    pub gpu_vram_mib: Option<u32>,
+    #[serde(default)]
+    pub storage_gib: Option<u32>,
+    #[serde(default)]
+    pub overlay_gib: Option<u32>,
+    /// Volumes to add (additive).
+    #[serde(default)]
+    pub add_volumes: Vec<VolumeMount>,
+    /// Volume specs to remove (matched verbatim by smolvm).
+    #[serde(default)]
+    pub remove_volumes: Vec<String>,
+    /// Ports to add (additive).
+    #[serde(default)]
+    pub add_ports: Vec<PortMapping>,
+    /// Port specs to remove (e.g. `8080:80`).
+    #[serde(default)]
+    pub remove_ports: Vec<String>,
+    /// Env vars to add or overwrite.
+    #[serde(default)]
+    pub add_env: Vec<EnvVar>,
+    /// Env var keys to remove.
+    #[serde(default)]
+    pub remove_env: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunConfig {
     pub image: String,

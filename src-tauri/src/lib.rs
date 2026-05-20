@@ -29,6 +29,7 @@ pub fn run() {
             commands::machines::delete_machine,
             commands::machines::inspect_machine,
             commands::machines::create_machine,
+            commands::machines::update_machine,
             commands::machines::run_machine,
             commands::exec::exec_start,
             commands::exec::exec_write,
