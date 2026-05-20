@@ -13,6 +13,7 @@ import {
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { api } from "@/lib/invoke";
 import type { Pack } from "@/lib/types";
+import { useMachinesStore } from "@/hooks/useMachines";
 
 type Tab = "local" | "build" | "transport";
 
@@ -352,14 +353,8 @@ function BuildTab() {
       )}
 
       {source === "from_vm" && (
-        <Field label="VM name" hint="must be stopped">
-          <input
-            {...noAutoCorrect}
-            value={fromVm}
-            onChange={(e) => setFromVm(e.target.value)}
-            placeholder="my-vm"
-            className="input"
-          />
+        <Field label="VM" hint="must be stopped">
+          <VmPicker value={fromVm} onChange={setFromVm} />
         </Field>
       )}
 
@@ -581,6 +576,52 @@ function Field({
       </div>
       {children}
     </label>
+  );
+}
+
+function VmPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (name: string) => void;
+}) {
+  const machines = useMachinesStore((s) => s.machines);
+  const stopped = machines.filter(
+    (m) => m.status === "stopped" || m.status === "created" || m.status === "exited",
+  );
+
+  if (stopped.length === 0) {
+    return (
+      <div className="rounded-md border border-border bg-bg-card/40 px-3 py-2 text-sm text-fg-muted">
+        No stopped VMs available. Stop a machine on the Machines tab to pack
+        it.
+      </div>
+    );
+  }
+
+  // Show value even if it's not in the current list (e.g. the VM was started
+  // or removed since picking) so we don't silently swallow the selection.
+  const valueInList = stopped.some((m) => m.name === value);
+  const missing = value && !valueInList;
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="input w-full"
+    >
+      <option value="">Select a stopped VM…</option>
+      {missing && (
+        <option value={value}>{value} (not stopped — refresh)</option>
+      )}
+      {stopped.map((m) => (
+        <option key={m.name} value={m.name}>
+          {m.name}
+          {m.image ? ` · ${m.image}` : ""}
+        </option>
+      ))}
+    </select>
   );
 }
 
