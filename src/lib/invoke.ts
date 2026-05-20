@@ -5,6 +5,7 @@ import type {
   Machine,
   MachineConfig,
   MachineInspect,
+  MachinePatch,
   MachineStats,
   RunConfig,
   SmolvmBinary,
@@ -21,6 +22,8 @@ export const api = {
     invoke<MachineInspect>("inspect_machine", { name }),
   createMachine: (config: MachineConfig) =>
     invoke<Machine>("create_machine", { config }),
+  updateMachine: (name: string, patch: MachinePatch) =>
+    invoke<Machine>("update_machine", { name, patch }),
   runMachine: (config: RunConfig) => invoke<string>("run_machine", { config }),
   listImages: () => invoke<ImageSummary[]>("list_images"),
   machineStats: (name: string) => invoke<MachineStats>("machine_stats", { name }),

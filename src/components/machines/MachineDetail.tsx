@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Check, Copy, Loader2, Play, RotateCcw, Square, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, Copy, Loader2, Pencil, Play, RotateCcw, Square, Trash2 } from "lucide-react";
 import type { Machine } from "@/lib/types";
 import { useMachinesStore } from "@/hooks/useMachines";
 import { useMachineDetailTab } from "@/hooks/useMachineDetailTab";
@@ -13,6 +13,7 @@ import { ExecTab } from "./tabs/ExecTab";
 import { FilesTab } from "./tabs/FilesTab";
 import { RunTab } from "./tabs/RunTab";
 import { StatsTab } from "./tabs/StatsTab";
+import { EditMachineDialog } from "./EditMachineDialog";
 
 interface Props {
   machine: Machine;
@@ -31,6 +32,7 @@ const TABS = [
 
 export function MachineDetail({ machine, onBack }: Props) {
   const [tab, setTab] = useState("logs");
+  const [editOpen, setEditOpen] = useState(false);
   const pendingTab = useMachineDetailTab((s) => s.pending);
   const clearPendingTab = useMachineDetailTab((s) => s.clear);
 
@@ -107,6 +109,13 @@ export function MachineDetail({ machine, onBack }: Props) {
               }}
             />
             <ActionBtn
+              icon={<Pencil className="h-4 w-4" />}
+              label="Edit"
+              disabled={running || busy}
+              title={running ? "Stop the machine to edit." : undefined}
+              onClick={() => setEditOpen(true)}
+            />
+            <ActionBtn
               icon={pending === "delete" ? Spinner : <Trash2 className="h-4 w-4" />}
               label={pending === "delete" ? "Deleting…" : "Delete"}
               destructive
@@ -128,6 +137,12 @@ export function MachineDetail({ machine, onBack }: Props) {
           {tab === "stats" && <StatsTab name={machine.name} running={running} />}
         </Tabs>
       </div>
+
+      <EditMachineDialog
+        open={editOpen}
+        machine={machine}
+        onClose={() => setEditOpen(false)}
+      />
     </div>
   );
 }
@@ -172,17 +187,20 @@ function ActionBtn({
   onClick,
   destructive,
   disabled,
+  title,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
   destructive?: boolean;
   disabled?: boolean;
+  title?: string;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={`inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm transition-colors ${
         disabled
           ? "opacity-40"
