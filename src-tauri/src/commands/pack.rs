@@ -14,6 +14,11 @@ use crate::types::{CreatePackOpts, Pack, RunPackOpts};
 /// `--output` paths). This scans a couple of common locations and stats
 /// each `.smolmachine` file. Use a file picker in the UI for packs
 /// stored elsewhere.
+///
+/// `smolvm pack create` produces two files per pack (unless `--single-file`):
+/// a Mach-O binary stub at `<name>.smolmachine` and a zstd sidecar at
+/// `<name>.smolmachine.smolmachine`. We list only the binary stub — the
+/// sidecar is derived when needed.
 #[tauri::command]
 pub async fn list_packs() -> Result<Vec<Pack>, String> {
     let mut dirs: Vec<PathBuf> = Vec::new();
@@ -33,17 +38,40 @@ pub async fn list_packs() -> Result<Vec<Pack>, String> {
         };
         for entry in entries.flatten() {
             let p = entry.path();
-            if p.is_file()
-                && p.extension()
-                    .and_then(|s| s.to_str())
-                    .map(|s| s.eq_ignore_ascii_case("smolmachine"))
-                    .unwrap_or(false)
-            {
+            if p.is_file() && is_pack_binary(&p) {
                 out.push(Pack::stub(&p));
             }
         }
     }
     Ok(out)
+}
+
+/// True if `path` looks like the binary stub of a pack (ends in `.smolmachine`
+/// but not the doubled `.smolmachine.smolmachine` of a sidecar).
+fn is_pack_binary(path: &std::path::Path) -> bool {
+    let name = match path.file_name().and_then(|s| s.to_str()) {
+        Some(n) => n,
+        None => return false,
+    };
+    if !name.to_ascii_lowercase().ends_with(".smolmachine") {
+        return false;
+    }
+    // Strip one .smolmachine and see if what remains still ends in .smolmachine
+    // — that signals this is the sidecar (foo.smolmachine.smolmachine).
+    let stem = &name[..name.len() - ".smolmachine".len()];
+    !stem.to_ascii_lowercase().ends_with(".smolmachine")
+}
+
+/// Derive the sidecar path from a binary stub path. smolvm's convention
+/// is `<binary>.smolmachine` — i.e. the binary's name with `.smolmachine`
+/// appended. If the input already points at a sidecar (doubled extension),
+/// returns it unchanged.
+fn sidecar_for(path: &str) -> String {
+    let p = std::path::Path::new(path);
+    if !is_pack_binary(p) {
+        return path.to_string();
+    }
+    format!("{path}.smolmachine")
 }
 
 /// Stat a local pack file. smolvm's `pack inspect` only works on registry
@@ -98,9 +126,13 @@ pub async fn create_pack(opts: CreatePackOpts) -> Result<String, String> {
 /// Run a packed sidecar. smolvm's `pack run` runs in the foreground and
 /// blocks until the workload exits — there is no detach flag. This wrapper
 /// is best for short non-interactive workloads or `--info` previews.
+///
+/// `path` may be either the binary stub or the sidecar; we derive the
+/// correct sidecar path automatically.
 #[tauri::command]
 pub async fn run_pack(path: String, opts: RunPackOpts) -> Result<String, String> {
-    let mut args: Vec<String> = vec!["pack".into(), "run".into(), "--sidecar".into(), path];
+    let sidecar = sidecar_for(&path);
+    let mut args: Vec<String> = vec!["pack".into(), "run".into(), "--sidecar".into(), sidecar];
     if opts.network {
         args.push("--net".into());
     }
