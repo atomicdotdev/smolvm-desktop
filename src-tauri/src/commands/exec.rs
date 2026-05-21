@@ -72,8 +72,16 @@ pub async fn exec_start(
     // POSIXLY_CORRECT, which propagates through `exec bash -i` and re-enters
     // POSIX mode (disabling readline, using the `sh-5.2#` prompt). Unset it
     // first so the exec'd bash starts as a normal interactive shell.
+    //
+    // Some distros (Fedora) ship /etc/inputrc with `enable-bracketed-paste
+    // off`. Override via INPUTRC pointing at a tiny file we write that only
+    // enables bracketed paste — without it multi-line pastes race the shell's
+    // line buffer the same way POSIX mode did.
     let cmd = command.unwrap_or_else(|| {
-        "sh -c 'unset POSIXLY_CORRECT; if command -v bash >/dev/null 2>&1; then exec bash -i; else exec sh; fi'"
+        "sh -c 'unset POSIXLY_CORRECT; \
+         printf \"%s\\n\" \"set enable-bracketed-paste on\" > /tmp/.smolvm-inputrc 2>/dev/null; \
+         export INPUTRC=/tmp/.smolvm-inputrc; \
+         if command -v bash >/dev/null 2>&1; then exec bash -i; else exec sh; fi'"
             .to_string()
     });
     // For the default shell-chooser we want to keep the single-quoted argument
