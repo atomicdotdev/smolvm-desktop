@@ -1,6 +1,57 @@
 use super::common::{EnvVar, PortMapping, VolumeMount};
 use serde::{Deserialize, Serialize};
 
+/// Restart policy persisted into a VM's `[restart]` Smolfile section.
+/// Mirrors smolvm's `RestartPolicy` enum (see `src/cli/smolfile.rs`).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RestartPolicy {
+    Never,
+    Always,
+    OnFailure,
+    UnlessStopped,
+}
+
+impl RestartPolicy {
+    pub fn as_smolfile_str(self) -> &'static str {
+        match self {
+            RestartPolicy::Never => "never",
+            RestartPolicy::Always => "always",
+            RestartPolicy::OnFailure => "on-failure",
+            RestartPolicy::UnlessStopped => "unless-stopped",
+        }
+    }
+}
+
+/// `[restart]` section of the Smolfile we emit at create-time. Only fields
+/// the user explicitly set are written; missing fields fall back to smolvm's
+/// defaults.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RestartSpec {
+    pub policy: RestartPolicy,
+    #[serde(default)]
+    pub max_retries: Option<u32>,
+    #[serde(default)]
+    pub max_backoff_secs: Option<u32>,
+}
+
+/// `[health]` section of the Smolfile we emit at create-time.
+/// `exec` is a free-form argv (usually `["sh", "-c", "<cmd>"]` wrapped by
+/// the UI). Durations are stored as integer seconds and serialized as
+/// `"<N>s"` strings which `parse_duration_secs` accepts.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HealthSpec {
+    pub exec: Vec<String>,
+    #[serde(default)]
+    pub interval_secs: Option<u32>,
+    #[serde(default)]
+    pub timeout_secs: Option<u32>,
+    #[serde(default)]
+    pub retries: Option<u32>,
+    #[serde(default)]
+    pub startup_grace_secs: Option<u32>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MachineStatus {
@@ -81,6 +132,15 @@ pub struct MachineConfig {
     /// Path to a smolfile to materialize the machine from.
     #[serde(default)]
     pub smolfile: Option<String>,
+    /// Optional restart policy authored at create time. When set, the
+    /// backend generates a tiny Smolfile containing only this section and
+    /// appends `--smolfile <tempfile>` to the create argv.
+    #[serde(default)]
+    pub restart: Option<RestartSpec>,
+    /// Optional health-check spec authored at create time. Composes with
+    /// `restart` into the same generated Smolfile.
+    #[serde(default)]
+    pub health: Option<HealthSpec>,
 }
 
 /// Patch sent to `machine update`. Only fields with `Some(_)` (or non-empty
@@ -153,4 +213,11 @@ pub struct RunConfig {
     pub gpu: Option<bool>,
     #[serde(default)]
     pub gpu_vram_mib: Option<u32>,
+    /// Optional restart policy. Persisted into the ephemeral VM's record
+    /// via a generated `--smolfile` (same mechanism as `create_machine`).
+    #[serde(default)]
+    pub restart: Option<RestartSpec>,
+    /// Optional health-check spec.
+    #[serde(default)]
+    pub health: Option<HealthSpec>,
 }

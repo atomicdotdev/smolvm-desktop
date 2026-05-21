@@ -1,8 +1,61 @@
 use crate::commands::exec;
-use crate::smolvm::{cli, parser};
+use crate::smolvm::{cli, parser, smolfile_gen};
 use crate::types::{
-    Machine, MachineConfig, MachineInspect, MachinePatch, MachineStatus, RunConfig,
+    HealthSpec, Machine, MachineConfig, MachineInspect, MachinePatch, MachineStatus, RestartSpec,
+    RunConfig,
 };
+
+/// RAII guard around a temp Smolfile so the file is cleaned up even if the
+/// `cli::run_checked` call panics or returns early via `?`.
+struct TempSmolfile {
+    path: std::path::PathBuf,
+}
+
+impl TempSmolfile {
+    fn write(contents: &str) -> Result<Self, String> {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        // Best-effort uniqueness: nanos + pid is plenty for sequential
+        // create calls in this process; the global CLI lock serializes
+        // smolvm invocations anyway.
+        let name = format!("smolvm-desktop-policy-{}-{}.smolfile", std::process::id(), nanos);
+        let path = std::env::temp_dir().join(name);
+        std::fs::write(&path, contents)
+            .map_err(|e| format!("failed to write temp smolfile {}: {e}", path.display()))?;
+        Ok(Self { path })
+    }
+
+    fn path_str(&self) -> String {
+        self.path.to_string_lossy().into_owned()
+    }
+}
+
+impl Drop for TempSmolfile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+/// If either `restart` or `health` is set, render the policy-only Smolfile
+/// to a tempfile and append `--smolfile <path>` to `args`. The returned
+/// guard MUST be held for the lifetime of the CLI call so the file isn't
+/// deleted before smolvm reads it.
+fn maybe_append_policy_smolfile(
+    args: &mut Vec<String>,
+    restart: Option<&RestartSpec>,
+    health: Option<&HealthSpec>,
+) -> Result<Option<TempSmolfile>, String> {
+    let Some(toml) = smolfile_gen::to_policy_smolfile(restart, health) else {
+        return Ok(None);
+    };
+    let guard = TempSmolfile::write(&toml)?;
+    args.push("--smolfile".into());
+    args.push(guard.path_str());
+    Ok(Some(guard))
+}
 
 #[tauri::command]
 pub async fn list_machines() -> Result<Vec<Machine>, String> {
@@ -137,6 +190,20 @@ pub async fn create_machine(config: MachineConfig) -> Result<Machine, String> {
         args.push("--gpu-vram".into());
         args.push(vram.to_string());
     }
+    // Policy authored in the dialog → generate a tiny policy-only Smolfile
+    // and append `--smolfile <tempfile>`. Skip when the user already picked
+    // a Smolfile source: their file is authoritative for restart/health
+    // anyway, and stacking two `--smolfile` flags has undefined behavior.
+    let _policy_guard = if config.smolfile.as_ref().and_then(trim_to_some).is_none() {
+        maybe_append_policy_smolfile(
+            &mut args,
+            config.restart.as_ref(),
+            config.health.as_ref(),
+        )?
+    } else {
+        None
+    };
+
     // Positional NAME last, optional
     if let Some(name) = &config.name {
         args.push(name.clone());
@@ -340,6 +407,16 @@ pub async fn run_machine(config: RunConfig) -> Result<String, String> {
         args.push("--gpu-vram".into());
         args.push(vram.to_string());
     }
+    // Policy authored in the dialog (ephemeral path). Same mechanism as
+    // `create_machine`: write a tiny policy-only Smolfile, append
+    // `--smolfile`. `pack run` / `machine run -d` accept it. Held alive
+    // until after `run_checked` returns; dropped via `_policy_guard`.
+    let _policy_guard = maybe_append_policy_smolfile(
+        &mut args,
+        config.restart.as_ref(),
+        config.health.as_ref(),
+    )?;
+
     if let Some(cmd) = &config.command {
         if !cmd.trim().is_empty() {
             args.push("--".into());

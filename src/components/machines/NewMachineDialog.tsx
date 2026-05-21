@@ -4,7 +4,14 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { defaultPackDir, defaultSmolfileDir } from "@/lib/paths";
 import { api } from "@/lib/invoke";
 import { useMachinesStore } from "@/hooks/useMachines";
-import type { EnvVar, PortMapping, VolumeMount } from "@/lib/types";
+import type {
+  EnvVar,
+  HealthSpec,
+  PortMapping,
+  RestartPolicy,
+  RestartSpec,
+  VolumeMount,
+} from "@/lib/types";
 
 type Mode = "persistent" | "ephemeral";
 type Source = "image" | "pack" | "smolfile";
@@ -74,6 +81,18 @@ export function NewMachineDialog({
   const [gpu, setGpu] = useState(false);
   const [gpuVram, setGpuVram] = useState("");
   const [advanced, setAdvanced] = useState(false);
+  // Restart & Health policy (Track A: authored at create time, persisted via
+  // a generated `--smolfile`). Default "never" means we emit nothing for the
+  // restart section.
+  const [policyOpen, setPolicyOpen] = useState(false);
+  const [restartPolicy, setRestartPolicy] = useState<RestartPolicy>("never");
+  const [restartMaxRetries, setRestartMaxRetries] = useState("");
+  const [restartMaxBackoff, setRestartMaxBackoff] = useState("");
+  const [healthCmd, setHealthCmd] = useState("");
+  const [healthInterval, setHealthInterval] = useState("");
+  const [healthTimeout, setHealthTimeout] = useState("");
+  const [healthRetries, setHealthRetries] = useState("");
+  const [healthStartupGrace, setHealthStartupGrace] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,6 +122,15 @@ export function NewMachineDialog({
     setGpu(false);
     setGpuVram("");
     setAdvanced(false);
+    setPolicyOpen(false);
+    setRestartPolicy("never");
+    setRestartMaxRetries("");
+    setRestartMaxBackoff("");
+    setHealthCmd("");
+    setHealthInterval("");
+    setHealthTimeout("");
+    setHealthRetries("");
+    setHealthStartupGrace("");
     setError(null);
     setSubmitting(false);
   };
@@ -165,6 +193,37 @@ export function NewMachineDialog({
     const gpuOrNull = gpu ? true : null;
     const gpuVramOrNull = gpu ? parsedGpuVram : null;
 
+    // Build restart / health specs from the dialog inputs. Each helper
+    // returns `null` when the user left the section blank, which the
+    // backend interprets as "don't generate a policy Smolfile".
+    const restartSpec = buildRestartSpec(
+      restartPolicy,
+      restartMaxRetries,
+      restartMaxBackoff,
+    );
+    const healthSpec = buildHealthSpec(
+      healthCmd,
+      healthInterval,
+      healthTimeout,
+      healthRetries,
+      healthStartupGrace,
+    );
+    const policyInvalidMsg = validatePolicyInputs(
+      restartSpec,
+      restartMaxRetries,
+      restartMaxBackoff,
+      healthCmd,
+      healthInterval,
+      healthTimeout,
+      healthRetries,
+      healthStartupGrace,
+    );
+    if (policyInvalidMsg) {
+      setError(policyInvalidMsg);
+      setSubmitting(false);
+      return;
+    }
+
     try {
       if (mode === "persistent") {
         await api.createMachine({
@@ -187,6 +246,8 @@ export function NewMachineDialog({
           gpu_vram_mib: gpuVramOrNull,
           from_pack: source === "pack" ? packPath.trim() || null : null,
           smolfile: source === "smolfile" ? smolfilePath.trim() || null : null,
+          restart: restartSpec,
+          health: healthSpec,
         });
       } else {
         await api.runMachine({
@@ -204,6 +265,8 @@ export function NewMachineDialog({
           command: command.trim() || null,
           gpu: gpuOrNull,
           gpu_vram_mib: gpuVramOrNull,
+          restart: restartSpec,
+          health: healthSpec,
         });
       }
       await refresh();
@@ -528,6 +591,132 @@ export function NewMachineDialog({
             </div>
           )}
 
+          <button
+            onClick={() => setPolicyOpen((o) => !o)}
+            className="text-sm text-fg-muted hover:text-fg"
+          >
+            {policyOpen ? "▾" : "▸"} Restart & Health
+          </button>
+
+          {policyOpen && (
+            <div className="space-y-3 rounded-md border border-border bg-bg/40 p-3">
+              {mode === "persistent" && source === "smolfile" && (
+                <div className="rounded-md border border-border bg-bg/50 px-2.5 py-1.5 text-xs text-fg-muted">
+                  A Smolfile source was selected — these fields are ignored
+                  here. Set <code>[restart]</code> and <code>[health]</code>{" "}
+                  directly in the Smolfile.
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Restart policy" hint="how monitor reacts on exit">
+                  <select
+                    value={restartPolicy}
+                    onChange={(e) =>
+                      setRestartPolicy(e.target.value as RestartPolicy)
+                    }
+                    className="input"
+                  >
+                    <option value="never">never</option>
+                    <option value="always">always</option>
+                    <option value="on-failure">on-failure</option>
+                    <option value="unless-stopped">unless-stopped</option>
+                  </select>
+                </Field>
+                <Field
+                  label="Max retries"
+                  hint="blank = smolvm default; 0 = unlimited"
+                >
+                  <input
+                    value={restartMaxRetries}
+                    onChange={(e) => setRestartMaxRetries(e.target.value)}
+                    placeholder="default"
+                    inputMode="numeric"
+                    disabled={restartPolicy === "never"}
+                    className="input disabled:opacity-50"
+                  />
+                </Field>
+                <Field label="Max backoff (s)" hint="cap on retry backoff">
+                  <input
+                    value={restartMaxBackoff}
+                    onChange={(e) => setRestartMaxBackoff(e.target.value)}
+                    placeholder="default"
+                    inputMode="numeric"
+                    disabled={restartPolicy === "never"}
+                    className="input disabled:opacity-50"
+                  />
+                </Field>
+              </div>
+
+              <Field
+                label="Health check command"
+                hint={
+                  'runs as `sh -c "<cmd>"` inside the VM (blank = no check)'
+                }
+              >
+                <input
+                  {...noAutoCorrect}
+                  value={healthCmd}
+                  onChange={(e) => setHealthCmd(e.target.value)}
+                  placeholder="curl -fsS http://127.0.0.1:8080/health"
+                  className="input font-mono"
+                />
+              </Field>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Interval (s)" hint="between checks">
+                  <input
+                    value={healthInterval}
+                    onChange={(e) => setHealthInterval(e.target.value)}
+                    placeholder="10"
+                    inputMode="numeric"
+                    disabled={!healthCmd.trim()}
+                    className="input disabled:opacity-50"
+                  />
+                </Field>
+                <Field label="Timeout (s)" hint="per-check timeout">
+                  <input
+                    value={healthTimeout}
+                    onChange={(e) => setHealthTimeout(e.target.value)}
+                    placeholder="2"
+                    inputMode="numeric"
+                    disabled={!healthCmd.trim()}
+                    className="input disabled:opacity-50"
+                  />
+                </Field>
+                <Field label="Retries" hint="failures before unhealthy">
+                  <input
+                    value={healthRetries}
+                    onChange={(e) => setHealthRetries(e.target.value)}
+                    placeholder="3"
+                    inputMode="numeric"
+                    disabled={!healthCmd.trim()}
+                    className="input disabled:opacity-50"
+                  />
+                </Field>
+                <Field
+                  label="Startup grace (s)"
+                  hint="ignore failures during boot"
+                >
+                  <input
+                    value={healthStartupGrace}
+                    onChange={(e) => setHealthStartupGrace(e.target.value)}
+                    placeholder="20"
+                    inputMode="numeric"
+                    disabled={!healthCmd.trim()}
+                    className="input disabled:opacity-50"
+                  />
+                </Field>
+              </div>
+
+              <p className="text-xs text-fg-muted">
+                Policy is persisted into the VM record via a generated
+                Smolfile. It only fires when something is actively running{" "}
+                <code>smolvm machine monitor</code> against the VM.
+              </p>
+            </div>
+          )}
+
           {error && (
             <div className="rounded-md border border-stopped/40 bg-stopped/10 p-3 text-sm text-stopped">
               {error}
@@ -809,6 +998,80 @@ const ENV_KEY_RE = /^[A-Z_][A-Z0-9_]*$/;
 
 export function isValidEnvKey(key: string): boolean {
   return ENV_KEY_RE.test(key);
+}
+
+/** Parse a possibly-blank string as a non-negative integer. Empty/blank → null. */
+function parseOptUInt(s: string): number | null | "invalid" {
+  const t = s.trim();
+  if (!t) return null;
+  const n = Number(t);
+  if (!Number.isInteger(n) || n < 0) return "invalid";
+  return n;
+}
+
+function buildRestartSpec(
+  policy: RestartPolicy,
+  maxRetries: string,
+  maxBackoff: string,
+): RestartSpec | null {
+  if (policy === "never") return null;
+  const spec: RestartSpec = { policy };
+  const r = parseOptUInt(maxRetries);
+  if (typeof r === "number") spec.max_retries = r;
+  const b = parseOptUInt(maxBackoff);
+  if (typeof b === "number") spec.max_backoff_secs = b;
+  return spec;
+}
+
+function buildHealthSpec(
+  cmd: string,
+  interval: string,
+  timeout: string,
+  retries: string,
+  startupGrace: string,
+): HealthSpec | null {
+  const c = cmd.trim();
+  if (!c) return null;
+  const spec: HealthSpec = { exec: ["sh", "-c", c] };
+  const i = parseOptUInt(interval);
+  if (typeof i === "number") spec.interval_secs = i;
+  const t = parseOptUInt(timeout);
+  if (typeof t === "number") spec.timeout_secs = t;
+  const r = parseOptUInt(retries);
+  if (typeof r === "number") spec.retries = r;
+  const g = parseOptUInt(startupGrace);
+  if (typeof g === "number") spec.startup_grace_secs = g;
+  return spec;
+}
+
+/** Returns an error message if any populated policy field failed to parse. */
+function validatePolicyInputs(
+  restartSpec: RestartSpec | null,
+  maxRetries: string,
+  maxBackoff: string,
+  healthCmd: string,
+  interval: string,
+  timeout: string,
+  retries: string,
+  startupGrace: string,
+): string | null {
+  if (restartSpec) {
+    if (parseOptUInt(maxRetries) === "invalid")
+      return "Restart max retries must be a non-negative integer";
+    if (parseOptUInt(maxBackoff) === "invalid")
+      return "Restart max backoff must be a non-negative integer (seconds)";
+  }
+  if (healthCmd.trim()) {
+    if (parseOptUInt(interval) === "invalid")
+      return "Health interval must be a non-negative integer (seconds)";
+    if (parseOptUInt(timeout) === "invalid")
+      return "Health timeout must be a non-negative integer (seconds)";
+    if (parseOptUInt(retries) === "invalid")
+      return "Health retries must be a non-negative integer";
+    if (parseOptUInt(startupGrace) === "invalid")
+      return "Health startup grace must be a non-negative integer (seconds)";
+  }
+  return null;
 }
 
 function EnvEditor({
