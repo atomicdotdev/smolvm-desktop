@@ -18,7 +18,6 @@ export const systemApi = {
   readRegistries: () => invoke<string>("read_registries"),
   writeRegistries: (content: string) =>
     invoke<void>("write_registries", { content }),
-  registriesExample: () => invoke<string>("registries_example"),
   getSmolvmBinary: () => invoke<SmolvmBinary>("get_smolvm_binary"),
   setSmolvmBinary: (
     path: string | null,

@@ -11,14 +11,22 @@ pub async fn get_registries_path() -> Result<String, String> {
     Ok(out.trim().to_string())
 }
 
+/// Read the raw TOML contents of the registries config file. `smolvm config
+/// registries show` returns a *summary* ("No registries configured…"), not the
+/// raw file, so we read directly. Returns an empty string if the file doesn't
+/// exist yet — the editor will start blank in that case.
 #[tauri::command]
 pub async fn read_registries() -> Result<String, String> {
-    cli::run_checked(&["config", "registries", "show"]).await
-}
-
-#[tauri::command]
-pub async fn registries_example() -> Result<String, String> {
-    cli::run_checked(&["config", "registries", "example"]).await
+    let path = get_registries_path().await?;
+    let path = path.trim();
+    if path.is_empty() {
+        return Err("smolvm returned an empty registries path".to_string());
+    }
+    match std::fs::read_to_string(path) {
+        Ok(s) => Ok(s),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(e) => Err(format!("read {path}: {e}")),
+    }
 }
 
 /// Write directly to the registries config path. smolvm's `config registries

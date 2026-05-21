@@ -153,17 +153,6 @@ export function SettingsView({
     }
   };
 
-  const resetRegistriesToExample = async () => {
-    setRegistriesErr(null);
-    setRegistriesStatus(null);
-    try {
-      const example = await api.registriesExample();
-      setRegistries(example);
-    } catch (e) {
-      setRegistriesErr(String(e));
-    }
-  };
-
   const saveRegistries = async () => {
     if (savingRegistries) return;
     setSavingRegistries(true);
@@ -403,7 +392,7 @@ export function SettingsView({
               }}
               spellCheck={false}
               className="input min-h-[14rem] w-full resize-y font-mono text-xs"
-              placeholder="# No registries configured yet. Click 'Reset to example' for a template."
+              placeholder={`# No registries configured yet. Add a [registries."docker.io"] section to get started.`}
             />
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -413,14 +402,6 @@ export function SettingsView({
               >
                 <Save className="h-4 w-4" />
                 {savingRegistries ? "Saving…" : "Save"}
-              </button>
-              <button
-                onClick={resetRegistriesToExample}
-                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-bg px-3 py-1.5 text-sm hover:bg-bg-card/70"
-                title="Replace the editor contents with the example template (not saved until you click Save)"
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reset to example
               </button>
               {registries !== registriesOriginal && !registriesStatus && (
                 <span className="text-xs text-fg-muted">Unsaved changes</span>

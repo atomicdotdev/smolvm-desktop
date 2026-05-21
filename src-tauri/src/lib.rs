@@ -62,7 +62,6 @@ pub fn run() {
             commands::config::get_registries_path,
             commands::config::read_registries,
             commands::config::write_registries,
-            commands::config::registries_example,
             commands::pack::list_packs,
             commands::pack::inspect_pack,
             commands::pack::inspect_registry_pack,
