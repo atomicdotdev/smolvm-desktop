@@ -3361,6 +3361,7 @@ name = "smolvm-desktop"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "libc",
  "portable-pty",
  "serde",
  "serde_json",

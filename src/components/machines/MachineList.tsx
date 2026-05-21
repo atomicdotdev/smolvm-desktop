@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { ChevronRight, Loader2, Play, Plus, RefreshCw, RotateCcw, Square, Trash2 } from "lucide-react";
 import { useMachinesStore } from "@/hooks/useMachines";
 import { useMachineDetailTab } from "@/hooks/useMachineDetailTab";
@@ -17,7 +18,7 @@ type NetworkFilter = "any" | "on" | "off";
 const IMAGE_ALL = "__all__";
 
 export function MachineList({ onSelect, filterImage, onClearFilter }: Props) {
-  const { machines: allMachines, loading, error, lastFetched, refresh } =
+  const { machines: allMachines, loading, error, lastFetched, refresh, supervised, refreshSupervised } =
     useMachinesStore();
   const [imageFilter, setImageFilter] = useState<string>(filterImage ?? IMAGE_ALL);
   const [networkFilter, setNetworkFilter] = useState<NetworkFilter>("any");
@@ -27,6 +28,29 @@ export function MachineList({ onSelect, filterImage, onClearFilter }: Props) {
   useEffect(() => {
     setImageFilter(filterImage ?? IMAGE_ALL);
   }, [filterImage]);
+
+  // Subscribe to supervisor-exit events so the "supervised" badge clears
+  // immediately when a supervisor dies (instead of waiting for the 3s poll).
+  useEffect(() => {
+    const unlisten: UnlistenFn[] = [];
+    let cancelled = false;
+    (async () => {
+      for (const name of supervised) {
+        const u = await listen<number>(`supervisor-exit-${name}`, () => {
+          void refreshSupervised();
+        });
+        if (cancelled) {
+          u();
+        } else {
+          unlisten.push(u);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      for (const u of unlisten) u();
+    };
+  }, [supervised, refreshSupervised]);
 
   const uniqueImages = useMemo(() => {
     const set = new Set<string>();
@@ -221,6 +245,7 @@ function MachineRow({
   const { start, stop, remove } = useMachinesStore();
   const setPendingTab = useMachineDetailTab((s) => s.set);
   const pending = useMachinesStore((s) => s.pending[machine.name]);
+  const supervised = useMachinesStore((s) => s.supervised.includes(machine.name));
   const running = machine.status === "running" || machine.status === "starting";
   const busy = pending !== undefined;
 
@@ -255,6 +280,14 @@ function MachineRow({
       <td className="px-6 py-3 font-medium">
         <span className="inline-flex items-center gap-1.5">
           {machine.name}
+          {supervised && (
+            <span
+              title="Desktop-managed supervisor is running"
+              className="rounded-sm border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent"
+            >
+              supervised
+            </span>
+          )}
           <ChevronRight className="h-3.5 w-3.5 text-fg-muted opacity-0 transition-opacity group-hover:opacity-100" />
         </span>
       </td>

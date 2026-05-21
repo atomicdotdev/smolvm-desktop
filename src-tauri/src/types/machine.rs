@@ -184,6 +184,43 @@ pub struct MachinePatch {
     pub remove_env: Vec<String>,
 }
 
+/// Per-session overrides for `smolvm machine monitor`. Each field is optional;
+/// empty means "use the persisted policy as-is". Sent verbatim from the UI to
+/// the supervisor spawn.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MonitorOverrides {
+    /// `--restart` flag: never | always | on-failure | unless-stopped.
+    #[serde(default)]
+    pub restart: Option<String>,
+    /// `--health-cmd` flag: a single shell-style command string. Wrapped by
+    /// the user; we pass through verbatim.
+    #[serde(default)]
+    pub health_cmd: Option<String>,
+    /// `--health-timeout` flag, in seconds.
+    #[serde(default)]
+    pub health_timeout_secs: Option<u32>,
+    /// `--interval` flag, in seconds.
+    #[serde(default)]
+    pub interval_secs: Option<u32>,
+    /// `--health-retries` flag.
+    #[serde(default)]
+    pub health_retries: Option<u32>,
+}
+
+/// Snapshot of a running supervisor returned by `supervise_status`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SupervisorStatus {
+    pub machine: String,
+    pub overrides: MonitorOverrides,
+    /// Unix-millis since epoch when the supervisor started.
+    pub started_at_ms: u64,
+    /// `Some(code)` iff the child has exited; `None` while running.
+    pub exit_code: Option<i32>,
+    /// Snapshot of the log ring buffer (oldest → newest), so a freshly-mounted
+    /// MonitorTab can backfill instead of starting blank.
+    pub log_tail: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunConfig {
     pub image: String,

@@ -1,4 +1,4 @@
-use crate::commands::exec;
+use crate::commands::{exec, supervisor};
 use crate::smolvm::{cli, parser, smolfile_gen};
 use crate::types::{
     HealthSpec, Machine, MachineConfig, MachineInspect, MachinePatch, MachineStatus, RestartSpec,
@@ -87,6 +87,9 @@ pub async fn start_machine(name: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn stop_machine(name: String) -> Result<(), String> {
+    // Stop the supervisor first — otherwise its restart loop races us and
+    // brings the VM back up right after we stop it.
+    supervisor::stop_for_machine(&name).await;
     exec::kill_sessions_for(&name);
     cli::run_checked(&["machine", "stop", "-n", &name]).await?;
     Ok(())
@@ -94,6 +97,7 @@ pub async fn stop_machine(name: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn delete_machine(name: String) -> Result<(), String> {
+    supervisor::stop_for_machine(&name).await;
     exec::kill_sessions_for(&name);
     cli::run_checked(&["machine", "delete", "-f", &name]).await?;
     Ok(())

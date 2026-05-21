@@ -101,6 +101,23 @@ export interface MachinePatch {
   remove_env?: string[];
 }
 
+/** Per-session overrides for `smolvm machine monitor`. All fields optional. */
+export interface MonitorOverrides {
+  restart?: string | null;
+  health_cmd?: string | null;
+  health_timeout_secs?: number | null;
+  interval_secs?: number | null;
+  health_retries?: number | null;
+}
+
+export interface SupervisorStatus {
+  machine: string;
+  overrides: MonitorOverrides;
+  started_at_ms: number;
+  exit_code: number | null;
+  log_tail: string[];
+}
+
 export interface RunConfig {
   image: string;
   cpus: number | null;

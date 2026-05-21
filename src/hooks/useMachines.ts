@@ -13,9 +13,12 @@ interface MachinesState {
   error: string | null;
   lastFetched: number | null;
   pending: Record<string, MachineAction>;
+  /** Names of machines that currently have a desktop-managed supervisor. */
+  supervised: string[];
   /** Incremented when a subsystem (e.g. exec PTY) is holding the smolvm DB lock. */
   pauseDepth: number;
   refresh: () => Promise<void>;
+  refreshSupervised: () => Promise<void>;
   start: (name: string) => Promise<void>;
   stop: (name: string) => Promise<void>;
   remove: (name: string) => Promise<void>;
@@ -45,7 +48,16 @@ export const useMachinesStore = create<MachinesState>((set, get) => ({
   error: null,
   lastFetched: null,
   pending: {},
+  supervised: [],
   pauseDepth: 0,
+  refreshSupervised: async () => {
+    try {
+      const names = await api.listSupervised();
+      set({ supervised: names });
+    } catch {
+      // Non-fatal: leave previous list in place.
+    }
+  },
   pausePolling: () => set((s) => ({ pauseDepth: s.pauseDepth + 1 })),
   resumePolling: () =>
     set((s) => ({ pauseDepth: Math.max(0, s.pauseDepth - 1) })),
@@ -63,6 +75,8 @@ export const useMachinesStore = create<MachinesState>((set, get) => ({
       const prev = get().machines;
       notifyTransitions(prev, machines);
       set({ machines, error: null, lastFetched: Date.now() });
+      // Best-effort sync of the supervised-name list alongside the machine list.
+      void get().refreshSupervised();
     } catch (e) {
       set({ error: String(e) });
     } finally {

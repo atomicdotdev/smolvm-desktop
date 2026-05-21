@@ -4,7 +4,9 @@ import type {
   MachineConfig,
   MachineInspect,
   MachinePatch,
+  MonitorOverrides,
   RunConfig,
+  SupervisorStatus,
 } from "../types";
 
 export const machineApi = {
@@ -19,4 +21,10 @@ export const machineApi = {
   updateMachine: (name: string, patch: MachinePatch) =>
     invoke<Machine>("update_machine", { name, patch }),
   runMachine: (config: RunConfig) => invoke<string>("run_machine", { config }),
+  superviseStart: (name: string, overrides: MonitorOverrides) =>
+    invoke<void>("supervise_start", { name, overrides }),
+  superviseStop: (name: string) => invoke<void>("supervise_stop", { name }),
+  superviseStatus: (name: string) =>
+    invoke<SupervisorStatus | null>("supervise_status", { name }),
+  listSupervised: () => invoke<string[]>("list_supervised"),
 };

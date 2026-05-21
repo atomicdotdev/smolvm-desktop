@@ -3,11 +3,11 @@ mod smolvm;
 mod tray;
 mod types;
 
-use tauri::WindowEvent;
+use tauri::{RunEvent, WindowEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -35,6 +35,10 @@ pub fn run() {
             commands::exec::exec_write,
             commands::exec::exec_resize,
             commands::exec::exec_stop,
+            commands::supervisor::supervise_start,
+            commands::supervisor::supervise_stop,
+            commands::supervisor::supervise_status,
+            commands::supervisor::list_supervised,
             commands::images::list_machine_images,
             commands::images::prune_machine_images,
             commands::stats::machine_stats,
@@ -65,6 +69,15 @@ pub fn run() {
             commands::pack::prune_packs,
             commands::smolfile::fetch_smolfile_from_url,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|_app_handle, event| {
+        // Reap supervised `smolvm machine monitor` children on app exit so
+        // we don't leak background processes. SIGINT first (lets smolvm's
+        // user_stopped path run), SIGKILL the stragglers.
+        if let RunEvent::ExitRequested { .. } | RunEvent::Exit = event {
+            commands::supervisor::shutdown_all_blocking();
+        }
+    });
 }

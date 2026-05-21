@@ -7,5 +7,6 @@ pub mod machines;
 pub mod pack;
 pub mod smolfile;
 pub mod stats;
+pub mod supervisor;
 pub mod system;
 pub mod tasks;

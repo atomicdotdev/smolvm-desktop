@@ -11,6 +11,7 @@ import { PortsTab } from "./tabs/PortsTab";
 import { LogsTab } from "./tabs/LogsTab";
 import { ExecTab } from "./tabs/ExecTab";
 import { FilesTab } from "./tabs/FilesTab";
+import { MonitorTab } from "./tabs/MonitorTab";
 import { RunTab } from "./tabs/RunTab";
 import { StatsTab } from "./tabs/StatsTab";
 import { EditMachineDialog } from "./EditMachineDialog";
@@ -28,6 +29,7 @@ const TABS = [
   { id: "files", label: "Files" },
   { id: "ports", label: "Ports" },
   { id: "stats", label: "Stats" },
+  { id: "monitor", label: "Monitor" },
 ];
 
 export function MachineDetail({ machine, onBack }: Props) {
@@ -141,6 +143,7 @@ export function MachineDetail({ machine, onBack }: Props) {
           {tab === "files" && <FilesTab name={machine.name} running={running} />}
           {tab === "ports" && <PortsTab machine={machine} />}
           {tab === "stats" && <StatsTab name={machine.name} running={running} />}
+          {tab === "monitor" && <MonitorTab machine={machine} />}
         </Tabs>
       </div>
 

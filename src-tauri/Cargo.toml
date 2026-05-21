@@ -25,5 +25,8 @@ anyhow = "1"
 portable-pty = "0.8"
 sysinfo = "0.33"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [features]
 custom-protocol = ["tauri/custom-protocol"]
