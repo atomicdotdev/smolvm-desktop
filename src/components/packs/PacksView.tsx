@@ -360,8 +360,15 @@ function BuildTab() {
     }
   };
 
+  const sourceLabel = (() => {
+    if (source === "smolfile") return smolfile.split("/").pop() || "smolfile";
+    if (source === "from_vm") return fromVm || "VM";
+    return image || "image";
+  })();
+
   return (
     <div className="space-y-4 p-6">
+      {submitting && <BuildBlockingModal sourceLabel={sourceLabel} />}
       <div className="rounded-md border border-border bg-bg/50 px-4 py-3 text-xs text-fg-muted">
         Runs <code>smolvm pack create</code>. The VM must be stopped when
         packing from an existing machine.
@@ -696,6 +703,46 @@ function Field({
       </div>
       {children}
     </label>
+  );
+}
+
+function BuildBlockingModal({ sourceLabel }: { sourceLabel: string }) {
+  // Swallow Escape so the modal can't be dismissed during a build. Pack
+  // create can take minutes (image pull + layer assembly + signing) and
+  // killing mid-flight leaves the output half-written.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener("keydown", onKey, { capture: true });
+    return () => window.removeEventListener("keydown", onKey, { capture: true });
+  }, []);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex w-full max-w-sm flex-col items-center gap-3 rounded-lg border border-border bg-bg-card p-6 shadow-2xl">
+        <Hammer className="h-8 w-8 animate-pulse text-accent" />
+        <h2 className="text-base font-semibold">Building pack…</h2>
+        <p className="text-center text-sm text-fg-muted">
+          Packing <span className="font-mono text-fg">{sourceLabel}</span>.
+        </p>
+        <p className="text-center text-xs text-fg-muted">
+          This can take several minutes — large images pull, extract, and
+          re-assemble before the final binary is signed. Don&apos;t navigate
+          away.
+        </p>
+        <div className="mt-2 flex items-center gap-2 text-xs text-fg-muted">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Working…
+        </div>
+      </div>
+    </div>
   );
 }
 
