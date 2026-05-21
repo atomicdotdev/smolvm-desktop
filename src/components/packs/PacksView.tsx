@@ -4,7 +4,9 @@ import {
   ChevronDown,
   Download,
   FolderOpen,
+  Globe,
   Hammer,
+  Loader2,
   Package,
   Play,
   RefreshCw,
@@ -258,6 +260,22 @@ function BuildTab() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [smolfileUrl, setSmolfileUrl] = useState("");
+  const [fetching, setFetching] = useState(false);
+
+  const fetchSmolfileUrl = async () => {
+    setFetching(true);
+    setError(null);
+    try {
+      const path = await api.fetchSmolfileFromUrl(smolfileUrl.trim());
+      setSmolfile(path);
+      setSmolfileUrl("");
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setFetching(false);
+    }
+  };
 
   const pickSmolfile = async () => {
     // Smolfiles are TOML. The conventional name is `Smolfile` (no extension)
@@ -333,25 +351,63 @@ function BuildTab() {
       </div>
 
       {source === "smolfile" && (
-        <Field label="Smolfile path">
-          <div className="flex gap-1">
-            <input
-              {...noAutoCorrect}
-              value={smolfile}
-              onChange={(e) => setSmolfile(e.target.value)}
-              placeholder="/path/to/smolfile"
-              className="input flex-1 font-mono"
-            />
-            <button
-              type="button"
-              onClick={pickSmolfile}
-              className="rounded-md border border-border bg-bg-card px-2 text-fg-muted hover:text-fg"
-              title="Browse"
-            >
-              <FolderOpen className="h-4 w-4" />
-            </button>
-          </div>
-        </Field>
+        <div className="space-y-2">
+          <Field label="Smolfile path">
+            <div className="flex gap-1">
+              <input
+                {...noAutoCorrect}
+                value={smolfile}
+                onChange={(e) => setSmolfile(e.target.value)}
+                placeholder="/path/to/smolfile"
+                className="input flex-1 font-mono"
+              />
+              <button
+                type="button"
+                onClick={pickSmolfile}
+                className="rounded-md border border-border bg-bg-card px-2 text-fg-muted hover:text-fg"
+                title="Browse"
+              >
+                <FolderOpen className="h-4 w-4" />
+              </button>
+            </div>
+          </Field>
+          <Field
+            label="Or fetch from URL"
+            hint="GitHub blob URLs are auto-converted to raw"
+          >
+            <div className="flex gap-1">
+              <div className="relative flex-1">
+                <Globe className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted" />
+                <input
+                  {...noAutoCorrect}
+                  value={smolfileUrl}
+                  onChange={(e) => setSmolfileUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && smolfileUrl.trim() && !fetching) {
+                      e.preventDefault();
+                      fetchSmolfileUrl();
+                    }
+                  }}
+                  placeholder="https://github.com/owner/repo/blob/main/example.smolfile"
+                  className="input w-full pl-8 font-mono"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={fetchSmolfileUrl}
+                disabled={!smolfileUrl.trim() || fetching}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-card px-3 text-sm hover:bg-bg-card/70 disabled:opacity-50"
+              >
+                {fetching ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                Fetch
+              </button>
+            </div>
+          </Field>
+        </div>
       )}
 
       {source === "image" && (
