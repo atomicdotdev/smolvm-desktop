@@ -142,12 +142,35 @@ pub async fn create_machine(config: MachineConfig) -> Result<Machine, String> {
         args.push(name.clone());
     }
 
+    // Snapshot existing machine names before the call. smolvm auto-generates
+    // a name (e.g. `vm-7095dce0`) when none is passed, and `--from <pack>`
+    // may also override the user-supplied name with one embedded in the pack
+    // manifest. Diffing before/after is the only reliable way to identify
+    // the newly created machine.
+    let before: std::collections::HashSet<String> = list_machines()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|m| m.name)
+        .collect();
+
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
     cli::run_checked(&arg_refs).await?;
 
-    // Return the created machine by looking it up
-    let created_name = config.name.clone().unwrap_or_else(|| "default".to_string());
-    refetch_machine(&created_name).await
+    let after = list_machines().await?;
+    // Prefer the user-supplied name if it actually shows up; fall back to
+    // any name that wasn't in `before`.
+    if let Some(name) = config.name.as_ref().and_then(trim_to_some) {
+        if let Some(m) = after.iter().find(|m| m.name == name) {
+            return Ok(m.clone());
+        }
+    }
+    let new_machine = after
+        .iter()
+        .find(|m| !before.contains(&m.name))
+        .cloned()
+        .ok_or_else(|| "machine created but could not be identified afterward".to_string())?;
+    Ok(new_machine)
 }
 
 #[tauri::command]
