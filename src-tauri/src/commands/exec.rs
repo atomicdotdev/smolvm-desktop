@@ -63,14 +63,26 @@ pub async fn exec_start(
         ));
     }
 
-    let cmd = command.unwrap_or_else(|| "/bin/sh".to_string());
-    // Split on whitespace so "/bin/sh" invokes sh directly (interactive), while
-    // "python3 -i" still works. Quoted args aren't handled — users needing
-    // complex pipelines can run `sh -c '...'` inside the shell once it's open.
-    let cmd_parts: Vec<String> = cmd
-        .split_whitespace()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
+    // Default shell: prefer bash interactive so readline-driven features like
+    // bracketed paste mode work (multi-line pastes with `\\`-continuations
+    // would otherwise race the shell's line buffer). Falls back to plain sh
+    // for minimal images (alpine, distroless) that don't ship bash.
+    let cmd = command.unwrap_or_else(|| {
+        "sh -c 'if command -v bash >/dev/null 2>&1; then exec bash -i; else exec sh; fi'"
+            .to_string()
+    });
+    // For the default shell-chooser we want to keep the single-quoted argument
+    // intact rather than naive whitespace split. Detect that shape and pass
+    // through verbatim; otherwise fall back to whitespace splitting which
+    // covers the common `python3 -i` case.
+    let cmd_parts: Vec<String> = if cmd.starts_with("sh -c '") && cmd.ends_with('\'') {
+        let inner = &cmd["sh -c '".len()..cmd.len() - 1];
+        vec!["sh".into(), "-c".into(), inner.into()]
+    } else {
+        cmd.split_whitespace()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+    };
     if cmd_parts.is_empty() {
         return Err("command is empty".into());
     }
