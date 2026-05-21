@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FolderOpen, Plus, X } from "lucide-react";
+import { Download, FolderOpen, Globe, Loader2, Plus, X } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { defaultPackDir, defaultSmolfileDir } from "@/lib/paths";
 import { api } from "@/lib/invoke";
@@ -35,6 +35,8 @@ export function NewMachineDialog({
   const [source, setSource] = useState<Source>("image");
   const [packPath, setPackPath] = useState("");
   const [smolfilePath, setSmolfilePath] = useState("");
+  const [smolfileUrl, setSmolfileUrl] = useState("");
+  const [fetchingSmolfile, setFetchingSmolfile] = useState(false);
   const [image, setImage] = useState(initialImage ?? "alpine");
 
   useEffect(() => {
@@ -286,35 +288,101 @@ export function NewMachineDialog({
           )}
 
           {mode === "persistent" && source === "smolfile" && (
-            <Field label="Smolfile" hint="recipe to materialize the machine">
-              <div className="flex gap-1">
-                <input
-                  {...noAutoCorrect}
-                  value={smolfilePath}
-                  onChange={(e) => setSmolfilePath(e.target.value)}
-                  placeholder="/path/to/smolfile"
-                  className="input flex-1 font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const picked = await openDialog({
-                      multiple: false,
-                      filters: [
-                        { name: "Smolfile (TOML)", extensions: ["toml", "Smolfile"] },
-                        { name: "All files", extensions: ["*"] },
-                      ],
-                      defaultPath: await defaultSmolfileDir(),
-                    });
-                    if (typeof picked === "string") setSmolfilePath(picked);
-                  }}
-                  title="Browse"
-                  className="rounded-md border border-border bg-bg-card px-2 text-fg-muted hover:text-fg"
-                >
-                  <FolderOpen className="h-4 w-4" />
-                </button>
-              </div>
-            </Field>
+            <div className="space-y-2">
+              <Field label="Smolfile" hint="recipe to materialize the machine">
+                <div className="flex gap-1">
+                  <input
+                    {...noAutoCorrect}
+                    value={smolfilePath}
+                    onChange={(e) => setSmolfilePath(e.target.value)}
+                    placeholder="/path/to/smolfile"
+                    className="input flex-1 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const picked = await openDialog({
+                        multiple: false,
+                        filters: [
+                          { name: "Smolfile (TOML)", extensions: ["toml", "Smolfile"] },
+                          { name: "All files", extensions: ["*"] },
+                        ],
+                        defaultPath: await defaultSmolfileDir(),
+                      });
+                      if (typeof picked === "string") setSmolfilePath(picked);
+                    }}
+                    title="Browse"
+                    className="rounded-md border border-border bg-bg-card px-2 text-fg-muted hover:text-fg"
+                  >
+                    <FolderOpen className="h-4 w-4" />
+                  </button>
+                </div>
+              </Field>
+              <Field
+                label="Or fetch from URL"
+                hint="GitHub blob URLs are auto-converted to raw"
+              >
+                <div className="flex gap-1">
+                  <div className="relative flex-1">
+                    <Globe className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted" />
+                    <input
+                      {...noAutoCorrect}
+                      value={smolfileUrl}
+                      onChange={(e) => setSmolfileUrl(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (
+                          e.key === "Enter" &&
+                          smolfileUrl.trim() &&
+                          !fetchingSmolfile
+                        ) {
+                          e.preventDefault();
+                          setFetchingSmolfile(true);
+                          try {
+                            const path = await api.fetchSmolfileFromUrl(
+                              smolfileUrl.trim(),
+                            );
+                            setSmolfilePath(path);
+                            setSmolfileUrl("");
+                          } catch (err) {
+                            setError(String(err));
+                          } finally {
+                            setFetchingSmolfile(false);
+                          }
+                        }
+                      }}
+                      placeholder="https://github.com/owner/repo/blob/main/example.smolfile"
+                      className="input w-full pl-8 font-mono"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setFetchingSmolfile(true);
+                      try {
+                        const path = await api.fetchSmolfileFromUrl(
+                          smolfileUrl.trim(),
+                        );
+                        setSmolfilePath(path);
+                        setSmolfileUrl("");
+                      } catch (err) {
+                        setError(String(err));
+                      } finally {
+                        setFetchingSmolfile(false);
+                      }
+                    }}
+                    disabled={!smolfileUrl.trim() || fetchingSmolfile}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-card px-3 text-sm hover:bg-bg-card/70 disabled:opacity-50"
+                  >
+                    {fetchingSmolfile ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                    Fetch
+                  </button>
+                </div>
+              </Field>
+            </div>
           )}
 
           {mode === "persistent" && (

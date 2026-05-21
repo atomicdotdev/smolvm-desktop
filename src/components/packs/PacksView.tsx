@@ -257,11 +257,47 @@ function BuildTab() {
   const [fromVm, setFromVm] = useState("");
   const [image, setImage] = useState("");
   const [output, setOutput] = useState("");
+  const [outputUserEdited, setOutputUserEdited] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [smolfileUrl, setSmolfileUrl] = useState("");
   const [fetching, setFetching] = useState(false);
+
+  // Auto-suggest an output path from the active source, until the user
+  // edits the field themselves (then we get out of the way).
+  useEffect(() => {
+    if (outputUserEdited) return;
+    let stem = "";
+    if (source === "smolfile" && smolfile) {
+      const base = smolfile.split("/").pop() ?? "";
+      stem = base.replace(/\.(smolfile|toml)$/i, "") || base;
+    } else if (source === "from_vm" && fromVm) {
+      stem = fromVm;
+    } else if (source === "image" && image) {
+      // alpine:latest → alpine, ghcr.io/foo/bar:v1 → bar
+      const lastSegment = image.split("/").pop() ?? image;
+      stem = lastSegment.split(":")[0] ?? lastSegment;
+    }
+    if (!stem) {
+      setOutput("");
+      return;
+    }
+    defaultPackDir()
+      .then((dir) => join(dir, `${stem}.smolmachine`))
+      .then(setOutput)
+      .catch(() => {
+        /* leave blank */
+      });
+  }, [source, smolfile, fromVm, image, outputUserEdited]);
+
+  const canBuild = (() => {
+    if (!output.trim()) return false;
+    if (source === "smolfile") return smolfile.trim().length > 0;
+    if (source === "from_vm") return fromVm.trim().length > 0;
+    if (source === "image") return image.trim().length > 0;
+    return false;
+  })();
 
   const fetchSmolfileUrl = async () => {
     setFetching(true);
@@ -295,9 +331,14 @@ function BuildTab() {
   const pickOutput = async () => {
     const picked = await saveDialog({
       filters: [{ name: "SmolVM pack", extensions: ["smolmachine"] }],
-      defaultPath: await join(await defaultPackDir(), "machine.smolmachine"),
+      defaultPath:
+        output.trim() ||
+        (await join(await defaultPackDir(), "machine.smolmachine")),
     });
-    if (typeof picked === "string") setOutput(picked);
+    if (typeof picked === "string") {
+      setOutput(picked);
+      setOutputUserEdited(true);
+    }
   };
 
   const submit = async () => {
@@ -433,7 +474,10 @@ function BuildTab() {
           <input
             {...noAutoCorrect}
             value={output}
-            onChange={(e) => setOutput(e.target.value)}
+            onChange={(e) => {
+              setOutput(e.target.value);
+              setOutputUserEdited(true);
+            }}
             placeholder="/path/to/out.smolmachine"
             className="input flex-1 font-mono"
           />
@@ -461,8 +505,13 @@ function BuildTab() {
 
       <button
         onClick={submit}
-        disabled={submitting}
-        className="inline-flex items-center gap-1.5 rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+        disabled={submitting || !canBuild}
+        title={
+          canBuild
+            ? undefined
+            : "Set the source and output path to enable Build."
+        }
+        className="inline-flex items-center gap-1.5 rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-accent"
       >
         <Hammer className="h-4 w-4" />
         {submitting ? "Building…" : "Build pack"}
