@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Loader2, Play, Plus, RefreshCw, RotateCcw, Square, Trash2 } from "lucide-react";
 import { useMachinesStore } from "@/hooks/useMachines";
+import { useMachineDetailTab } from "@/hooks/useMachineDetailTab";
 import { useNewMachineDialog } from "@/hooks/useNewMachineDialog";
 import { getConfirmDestructive } from "@/components/settings/SettingsView";
 import { StatusBadge } from "@/components/shared/Badge";
@@ -218,6 +219,7 @@ function MachineRow({
   onOpen: () => void;
 }) {
   const { start, stop, remove } = useMachinesStore();
+  const setPendingTab = useMachineDetailTab((s) => s.set);
   const pending = useMachinesStore((s) => s.pending[machine.name]);
   const running = machine.status === "running" || machine.status === "starting";
   const busy = pending !== undefined;
@@ -229,9 +231,18 @@ function MachineRow({
     remove(machine.name);
   };
 
+  // Start is the long-running case (init commands may take minutes). Pre-set
+  // the Logs tab and navigate into the machine so the user lands on streaming
+  // output immediately.
+  const startAndOpen = () => {
+    setPendingTab(machine.name, "logs");
+    onOpen();
+    void start(machine.name);
+  };
+
   const toggle = running
     ? { title: "Stop", label: "Stopping…", icon: <Square className="h-4 w-4" />, onClick: () => stop(machine.name), kind: "stop" as const }
-    : { title: "Start", label: "Starting…", icon: <Play className="h-4 w-4" />, onClick: () => start(machine.name), kind: "start" as const };
+    : { title: "Start", label: "Starting…", icon: <Play className="h-4 w-4" />, onClick: startAndOpen, kind: "start" as const };
 
   return (
     <tr
@@ -273,6 +284,8 @@ function MachineRow({
             disabled={!running}
             icon={<RotateCcw className="h-4 w-4" />}
             onClick={async () => {
+              setPendingTab(machine.name, "logs");
+              onOpen();
               await stop(machine.name);
               await start(machine.name);
             }}

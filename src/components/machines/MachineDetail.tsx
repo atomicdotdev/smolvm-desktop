@@ -58,6 +58,11 @@ export function MachineDetail({ machine, onBack }: Props) {
     remove(machine.name).then(onBack);
   };
 
+  const startAndShowLogs = () => {
+    setTab("logs");
+    void start(machine.name);
+  };
+
   const toggle = running
     ? {
         label: pending === "stop" ? "Stopping…" : "Stop",
@@ -67,7 +72,7 @@ export function MachineDetail({ machine, onBack }: Props) {
     : {
         label: pending === "start" ? "Starting…" : "Start",
         icon: pending === "start" ? Spinner : <Play className="h-4 w-4" />,
-        onClick: () => start(machine.name),
+        onClick: startAndShowLogs,
       };
 
   return (
@@ -104,6 +109,7 @@ export function MachineDetail({ machine, onBack }: Props) {
               label="Restart"
               disabled={!running || busy}
               onClick={async () => {
+                setTab("logs");
                 await stop(machine.name);
                 await start(machine.name);
               }}
