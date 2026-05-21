@@ -111,6 +111,10 @@ export function LogsTab({ name }: { name: string }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Filter logs"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            autoComplete="off"
             className="w-full rounded-md border border-border bg-bg py-1 pl-7 pr-2 text-sm focus:border-accent focus:outline-none"
           />
         </div>

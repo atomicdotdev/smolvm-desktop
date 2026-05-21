@@ -385,7 +385,10 @@ function PreviewBody({
     <textarea
       value={draft ?? ""}
       onChange={(e) => onDraftChange(e.target.value)}
+      autoCorrect="off"
+      autoCapitalize="off"
       spellCheck={false}
+      autoComplete="off"
       className="h-full w-full resize-none bg-bg-term p-3 font-mono text-xs leading-5 text-fg-term outline-none"
     />
   );

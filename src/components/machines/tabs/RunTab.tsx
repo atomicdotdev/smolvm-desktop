@@ -162,6 +162,10 @@ export function RunTab({ name, running }: { name: string; running: boolean }) {
             placeholder={`trivy fs --scanners vuln,secret --severity HIGH,CRITICAL --skip-dirs .git --skip-dirs target src`}
             rows={3}
             disabled={isRunning}
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            autoComplete="off"
             className="input flex-1 resize-y font-mono text-sm disabled:opacity-60"
           />
           <div className="flex flex-col gap-2">
