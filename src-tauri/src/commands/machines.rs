@@ -75,8 +75,11 @@ pub async fn create_machine(config: MachineConfig) -> Result<Machine, String> {
     let from_pack = config.from_pack.as_ref().and_then(trim_to_some);
     let smolfile = config.smolfile.as_ref().and_then(trim_to_some);
     if let Some(from) = from_pack {
+        // `pack create` produces a binary stub + sidecar pair; smolvm's
+        // `--from` wants the sidecar. Auto-resolve if the user picked the
+        // binary path (the more obvious file in the picker).
         args.push("--from".into());
-        args.push(from);
+        args.push(crate::commands::pack::sidecar_for(&from));
     } else if let Some(sf) = smolfile {
         args.push("--smolfile".into());
         args.push(sf);

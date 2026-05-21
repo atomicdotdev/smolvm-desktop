@@ -48,7 +48,7 @@ pub async fn list_packs() -> Result<Vec<Pack>, String> {
 
 /// True if `path` looks like the binary stub of a pack (ends in `.smolmachine`
 /// but not the doubled `.smolmachine.smolmachine` of a sidecar).
-fn is_pack_binary(path: &std::path::Path) -> bool {
+pub fn is_pack_binary(path: &std::path::Path) -> bool {
     let name = match path.file_name().and_then(|s| s.to_str()) {
         Some(n) => n,
         None => return false,
@@ -66,7 +66,7 @@ fn is_pack_binary(path: &std::path::Path) -> bool {
 /// is `<binary>.smolmachine` — i.e. the binary's name with `.smolmachine`
 /// appended. If the input already points at a sidecar (doubled extension),
 /// returns it unchanged.
-fn sidecar_for(path: &str) -> String {
+pub fn sidecar_for(path: &str) -> String {
     let p = std::path::Path::new(path);
     if !is_pack_binary(p) {
         return path.to_string();
