@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   Eraser,
@@ -7,6 +7,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Save,
   X,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
@@ -84,7 +85,17 @@ function saveBinaryOverride(override: BinaryOverride | null) {
   localStorage.setItem(BINARY_KEY, JSON.stringify(override));
 }
 
-export function SettingsView() {
+export type SettingsSection = "registries";
+
+interface SettingsViewProps {
+  focusSection?: SettingsSection | null;
+  onFocusSectionConsumed?: () => void;
+}
+
+export function SettingsView({
+  focusSection = null,
+  onFocusSectionConsumed,
+}: SettingsViewProps = {}) {
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [current, setCurrent] = useState<SmolvmBinary>({
     path: "smolvm",
@@ -95,6 +106,13 @@ export function SettingsView() {
   });
   const [config, setConfig] = useState("");
   const [configErr, setConfigErr] = useState<string | null>(null);
+  const [registries, setRegistries] = useState("");
+  const [registriesOriginal, setRegistriesOriginal] = useState("");
+  const [registriesPath, setRegistriesPath] = useState<string | null>(null);
+  const [registriesErr, setRegistriesErr] = useState<string | null>(null);
+  const [registriesStatus, setRegistriesStatus] = useState<string | null>(null);
+  const [savingRegistries, setSavingRegistries] = useState(false);
+  const registriesSectionRef = useRef<HTMLElement | null>(null);
   const [loading, setLoading] = useState(false);
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs());
   const [pending, setPending] = useState<PendingChange | null>(null);
@@ -106,26 +124,78 @@ export function SettingsView() {
   const refresh = async () => {
     setLoading(true);
     try {
-      const [i, c, bin] = await Promise.all([
+      let configError: string | null = null;
+      let registriesError: string | null = null;
+      const [i, c, bin, reg, regPath] = await Promise.all([
         api.systemInfo(),
         api.smolvmConfig().catch((e) => {
-          setConfigErr(String(e));
+          configError = String(e);
           return "";
         }),
         api.getSmolvmBinary(),
+        api.readRegistries().catch((e) => {
+          registriesError = String(e);
+          return "";
+        }),
+        api.getRegistriesPath().catch(() => ""),
       ]);
       setInfo(i);
       setConfig(c);
       setCurrent(bin);
-      setConfigErr(null);
+      setConfigErr(configError);
+      setRegistries(reg);
+      setRegistriesOriginal(reg);
+      setRegistriesPath(regPath ? regPath.trim() : null);
+      setRegistriesErr(registriesError);
+      setRegistriesStatus(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const resetRegistriesToExample = async () => {
+    setRegistriesErr(null);
+    setRegistriesStatus(null);
+    try {
+      const example = await api.registriesExample();
+      setRegistries(example);
+    } catch (e) {
+      setRegistriesErr(String(e));
+    }
+  };
+
+  const saveRegistries = async () => {
+    if (savingRegistries) return;
+    setSavingRegistries(true);
+    setRegistriesErr(null);
+    setRegistriesStatus(null);
+    try {
+      await api.writeRegistries(registries);
+      setRegistriesOriginal(registries);
+      setRegistriesStatus("Saved.");
+    } catch (e) {
+      setRegistriesErr(String(e));
+    } finally {
+      setSavingRegistries(false);
     }
   };
 
   useEffect(() => {
     refresh();
   }, []);
+
+  useEffect(() => {
+    if (focusSection !== "registries") return;
+    // Defer to next frame so the section is mounted before we scroll.
+    const id = requestAnimationFrame(() => {
+      registriesSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      onFocusSectionConsumed?.();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [focusSection, onFocusSectionConsumed]);
 
   const updatePrefs = (patch: Partial<Prefs>) => {
     const next = { ...prefs, ...patch };
@@ -306,6 +376,64 @@ export function SettingsView() {
                 </pre>
               )}
             </div>
+          </div>
+        </section>
+
+        <section ref={registriesSectionRef}>
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-fg-muted">
+            Registries
+          </h2>
+          <div className="space-y-3 rounded-md border border-border bg-bg-card p-4 text-sm">
+            <p className="text-xs text-fg-muted">
+              Registry credentials and endpoints used by{" "}
+              <span className="font-mono">smolvm pack push</span> /{" "}
+              <span className="font-mono">pull</span>. Saved files are validated by
+              smolvm on its next invocation — malformed configs surface as errors then.
+            </p>
+            {registriesPath && (
+              <div className="font-mono text-[11px] text-fg-muted break-all">
+                {registriesPath}
+              </div>
+            )}
+            <textarea
+              value={registries}
+              onChange={(e) => {
+                setRegistries(e.target.value);
+                if (registriesStatus) setRegistriesStatus(null);
+              }}
+              spellCheck={false}
+              className="input min-h-[14rem] w-full resize-y font-mono text-xs"
+              placeholder="# No registries configured yet. Click 'Reset to example' for a template."
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={saveRegistries}
+                disabled={savingRegistries || registries === registriesOriginal}
+                className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+              >
+                <Save className="h-4 w-4" />
+                {savingRegistries ? "Saving…" : "Save"}
+              </button>
+              <button
+                onClick={resetRegistriesToExample}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-bg px-3 py-1.5 text-sm hover:bg-bg-card/70"
+                title="Replace the editor contents with the example template (not saved until you click Save)"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reset to example
+              </button>
+              {registries !== registriesOriginal && !registriesStatus && (
+                <span className="text-xs text-fg-muted">Unsaved changes</span>
+              )}
+              {registriesStatus && (
+                <span className="text-xs text-accent">{registriesStatus}</span>
+              )}
+            </div>
+            {registriesErr && (
+              <div className="rounded border border-stopped/40 bg-stopped/10 p-2 text-xs text-stopped">
+                {registriesErr}
+              </div>
+            )}
           </div>
         </section>
 

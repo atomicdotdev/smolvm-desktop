@@ -12,7 +12,12 @@ import { ImagesView } from "@/components/images/ImagesView";
 import { VolumesView } from "@/components/volumes/VolumesView";
 import { PacksView } from "@/components/packs/PacksView";
 import { SystemDashboard } from "@/components/stats/SystemDashboard";
-import { SettingsView, getPollInterval, loadBinaryOverride } from "@/components/settings/SettingsView";
+import {
+  SettingsView,
+  getPollInterval,
+  loadBinaryOverride,
+  type SettingsSection,
+} from "@/components/settings/SettingsView";
 import { api } from "@/lib/invoke";
 import { Toaster } from "@/components/shared/Toaster";
 import { ErrorModal } from "@/components/shared/ErrorModal";
@@ -26,6 +31,7 @@ export default function App() {
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
   const [machineFilterImage, setMachineFilterImage] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [settingsFocus, setSettingsFocus] = useState<SettingsSection | null>(null);
   // Apply any persisted binary-path override before we start polling.
   useEffect(() => {
     const override = loadBinaryOverride();
@@ -50,6 +56,13 @@ export default function App() {
     setView(v);
     setSelectedMachine(null);
     if (v !== "machines") setMachineFilterImage(null);
+    if (v !== "settings") setSettingsFocus(null);
+  };
+
+  const openSettingsSection = (section: SettingsSection) => {
+    setSettingsFocus(section);
+    handleNav("settings");
+    setSettingsFocus(section);
   };
 
   useShortcuts(
@@ -123,10 +136,15 @@ export default function App() {
             />
           )}
           {view === "packs" && (
-            <PacksView onOpenSettings={() => handleNav("settings")} />
+            <PacksView onOpenSettings={() => openSettingsSection("registries")} />
           )}
           {view === "stats" && <SystemDashboard />}
-          {view === "settings" && <SettingsView />}
+          {view === "settings" && (
+            <SettingsView
+              focusSection={settingsFocus}
+              onFocusSectionConsumed={() => setSettingsFocus(null)}
+            />
+          )}
         </main>
       </div>
       <StatusBar onOpenSettings={() => handleNav("settings")} />
