@@ -78,7 +78,8 @@ export function ExecTab({ name, running }: { name: string; running: boolean }) {
         await invoke("exec_start", {
           sessionId,
           machine: name,
-          command: "/bin/sh",
+          // Omit `command` so the backend picks its default chain that prefers
+          // bash interactive (for bracketed paste / multi-line paste support).
           cols: term.cols,
           rows: term.rows,
         });
