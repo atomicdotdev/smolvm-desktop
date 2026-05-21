@@ -67,8 +67,13 @@ pub async fn exec_start(
     // bracketed paste mode work (multi-line pastes with `\\`-continuations
     // would otherwise race the shell's line buffer). Falls back to plain sh
     // for minimal images (alpine, distroless) that don't ship bash.
+    //
+    // The outer `sh` is bash invoked as `sh` on most distros — that sets
+    // POSIXLY_CORRECT, which propagates through `exec bash -i` and re-enters
+    // POSIX mode (disabling readline, using the `sh-5.2#` prompt). Unset it
+    // first so the exec'd bash starts as a normal interactive shell.
     let cmd = command.unwrap_or_else(|| {
-        "sh -c 'if command -v bash >/dev/null 2>&1; then exec bash -i; else exec sh; fi'"
+        "sh -c 'unset POSIXLY_CORRECT; if command -v bash >/dev/null 2>&1; then exec bash -i; else exec sh; fi'"
             .to_string()
     });
     // For the default shell-chooser we want to keep the single-quoted argument
