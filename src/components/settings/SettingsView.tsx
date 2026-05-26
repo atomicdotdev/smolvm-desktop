@@ -7,7 +7,6 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
-  Save,
   X,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
@@ -15,6 +14,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api } from "@/lib/invoke";
 import { useHealthStore } from "@/hooks/useHealth";
 import type { SmolvmBinary, SystemInfo } from "@/lib/types";
+import { RegistriesEditor } from "./RegistriesEditor";
 
 const PREFS_KEY = "smolvm-desktop.prefs";
 const BINARY_KEY = "smolvm-desktop.binary";
@@ -106,12 +106,10 @@ export function SettingsView({
   });
   const [config, setConfig] = useState("");
   const [configErr, setConfigErr] = useState<string | null>(null);
-  const [registries, setRegistries] = useState("");
-  const [registriesOriginal, setRegistriesOriginal] = useState("");
+  const [registriesText, setRegistriesText] = useState("");
   const [registriesPath, setRegistriesPath] = useState<string | null>(null);
   const [registriesErr, setRegistriesErr] = useState<string | null>(null);
-  const [registriesStatus, setRegistriesStatus] = useState<string | null>(null);
-  const [savingRegistries, setSavingRegistries] = useState(false);
+  const [registriesLoadKey, setRegistriesLoadKey] = useState(0);
   const registriesSectionRef = useRef<HTMLElement | null>(null);
   const [loading, setLoading] = useState(false);
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs());
@@ -143,29 +141,12 @@ export function SettingsView({
       setConfig(c);
       setCurrent(bin);
       setConfigErr(configError);
-      setRegistries(reg);
-      setRegistriesOriginal(reg);
+      setRegistriesText(reg);
       setRegistriesPath(regPath ? regPath.trim() : null);
       setRegistriesErr(registriesError);
-      setRegistriesStatus(null);
+      setRegistriesLoadKey((k) => k + 1);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const saveRegistries = async () => {
-    if (savingRegistries) return;
-    setSavingRegistries(true);
-    setRegistriesErr(null);
-    setRegistriesStatus(null);
-    try {
-      await api.writeRegistries(registries);
-      setRegistriesOriginal(registries);
-      setRegistriesStatus("Saved.");
-    } catch (e) {
-      setRegistriesErr(String(e));
-    } finally {
-      setSavingRegistries(false);
     }
   };
 
@@ -372,50 +353,12 @@ export function SettingsView({
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-fg-muted">
             Registries
           </h2>
-          <div className="space-y-3 rounded-md border border-border bg-bg-card p-4 text-sm">
-            <p className="text-xs text-fg-muted">
-              Registry credentials and endpoints used by{" "}
-              <span className="font-mono">smolvm pack push</span> /{" "}
-              <span className="font-mono">pull</span>. Saved files are validated by
-              smolvm on its next invocation — malformed configs surface as errors then.
-            </p>
-            {registriesPath && (
-              <div className="font-mono text-[11px] text-fg-muted break-all">
-                {registriesPath}
-              </div>
-            )}
-            <textarea
-              value={registries}
-              onChange={(e) => {
-                setRegistries(e.target.value);
-                if (registriesStatus) setRegistriesStatus(null);
-              }}
-              spellCheck={false}
-              className="input min-h-[14rem] w-full resize-y font-mono text-xs"
-              placeholder={`# No registries configured yet. Add a [registries."docker.io"] section to get started.`}
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={saveRegistries}
-                disabled={savingRegistries || registries === registriesOriginal}
-                className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50"
-              >
-                <Save className="h-4 w-4" />
-                {savingRegistries ? "Saving…" : "Save"}
-              </button>
-              {registries !== registriesOriginal && !registriesStatus && (
-                <span className="text-xs text-fg-muted">Unsaved changes</span>
-              )}
-              {registriesStatus && (
-                <span className="text-xs text-accent">{registriesStatus}</span>
-              )}
-            </div>
-            {registriesErr && (
-              <div className="rounded border border-stopped/40 bg-stopped/10 p-2 text-xs text-stopped">
-                {registriesErr}
-              </div>
-            )}
-          </div>
+          <RegistriesEditor
+            key={registriesLoadKey}
+            initialText={registriesText}
+            filePath={registriesPath}
+            loadError={registriesErr}
+          />
         </section>
 
         <section>
