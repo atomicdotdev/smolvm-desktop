@@ -8,8 +8,7 @@ use tauri::{
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
-// TODO: replace with real docs URL once available.
-const DOCS_URL: &str = "https://github.com/atomic-dev/smolvm";
+const DOCS_URL: &str = "https://github.com/atomicdotdev/smolvm-desktop";
 
 const TRAY_ID: &str = "main";
 const POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);

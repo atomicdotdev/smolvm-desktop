@@ -428,7 +428,7 @@ export function SettingsView({
             <Row label="SmolVM Desktop" value="0.1.0" />
             <div className="flex flex-col gap-1">
               <button
-                onClick={() => open("https://github.com/atomicdotdev/smolvm")}
+                onClick={() => open("https://github.com/smol-machines/smolvm")}
                 className="inline-flex w-fit items-center gap-1.5 text-accent hover:underline"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
@@ -436,7 +436,7 @@ export function SettingsView({
               </button>
               <button
                 onClick={() =>
-                  open("https://github.com/atomicdotdev/circuit-vm-tauri")
+                  open("https://github.com/atomicdotdev/smolvm-desktop")
                 }
                 className="inline-flex w-fit items-center gap-1.5 text-accent hover:underline"
               >
