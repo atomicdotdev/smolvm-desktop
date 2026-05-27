@@ -10,6 +10,37 @@ interface Props {
   machine: Machine;
 }
 
+/** Human-readable summary of the persisted restart policy. */
+function formatRestartPolicy(m: Machine): string {
+  const policy = m.restart_policy ?? "never";
+  if (policy === "never") return "never";
+  const parts = [policy];
+  // max_retries: 0 means unlimited in smolvm.
+  if (m.restart_max_retries != null) {
+    parts.push(
+      m.restart_max_retries === 0
+        ? "unlimited retries"
+        : `max ${m.restart_max_retries} retries`,
+    );
+  }
+  if (m.restart_count != null && m.restart_count > 0) {
+    parts.push(`${m.restart_count} so far`);
+  }
+  return parts.join(" · ");
+}
+
+/** Human-readable summary of the persisted health check. */
+function formatHealthPolicy(m: Machine): string {
+  if (!m.health_cmd) return "none configured";
+  const parts = [m.health_cmd];
+  if (m.health_interval_secs != null) parts.push(`every ${m.health_interval_secs}s`);
+  if (m.health_timeout_secs != null) parts.push(`timeout ${m.health_timeout_secs}s`);
+  if (m.health_retries != null) parts.push(`${m.health_retries} retries`);
+  if (m.health_startup_grace_secs != null)
+    parts.push(`${m.health_startup_grace_secs}s grace`);
+  return parts.join(" · ");
+}
+
 /**
  * Live status derived from scraping `smolvm machine monitor`'s stdout.
  * Prose parsing is fragile but covers the documented v0.7.2 output shape.
@@ -255,12 +286,23 @@ export function MonitorTab({ machine }: Props) {
       {/* Persisted policy panel */}
       <section className="border-b border-border bg-bg px-6 py-4">
         <h3 className="text-sm font-medium text-fg">Persisted policy</h3>
-        <p className="mt-1 text-xs text-fg-muted">
-          Policy read-back not available in this smolvm version. Once upstream
-          surfaces <code>restart_*</code> / <code>health_*</code> fields in{" "}
-          <code>machine ls --json</code>, this panel will show the policy set
-          at create time.
-        </p>
+        {machine.restart_policy === null ? (
+          <p className="mt-1 text-xs text-fg-muted">
+            Policy read-back requires smolvm ≥ 0.8.0. Upgrade to see the
+            restart and health policy set at create time.
+          </p>
+        ) : (
+          <dl className="mt-2 space-y-1.5 text-xs">
+            <div className="flex gap-2">
+              <dt className="w-32 shrink-0 text-fg-muted">Restart</dt>
+              <dd className="text-fg">{formatRestartPolicy(machine)}</dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="w-32 shrink-0 text-fg-muted">Health check</dt>
+              <dd className="text-fg">{formatHealthPolicy(machine)}</dd>
+            </div>
+          </dl>
+        )}
       </section>
 
       {/* Supervisor panel */}

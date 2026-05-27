@@ -48,6 +48,15 @@ export interface Machine {
   pid: number | null;
   env_count: number;
   mounts: VolumeMount[];
+  // Persisted restart/health policy (smolvm >= 0.8.0; null on older versions).
+  restart_policy: string | null;
+  restart_max_retries: number | null;
+  restart_count: number | null;
+  health_cmd: string | null;
+  health_interval_secs: number | null;
+  health_timeout_secs: number | null;
+  health_retries: number | null;
+  health_startup_grace_secs: number | null;
 }
 
 export interface MachineInspect {

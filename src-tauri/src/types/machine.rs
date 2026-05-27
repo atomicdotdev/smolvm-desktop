@@ -90,6 +90,24 @@ pub struct Machine {
     /// only exposes a count, not the actual paths.
     #[serde(default)]
     pub mounts: Vec<VolumeMount>,
+    /// Persisted restart/health policy, exposed by `machine ls --json` on
+    /// smolvm >= 0.8.0. `None` on older versions that don't surface these.
+    #[serde(default)]
+    pub restart_policy: Option<String>,
+    #[serde(default)]
+    pub restart_max_retries: Option<u32>,
+    #[serde(default)]
+    pub restart_count: Option<u32>,
+    #[serde(default)]
+    pub health_cmd: Option<String>,
+    #[serde(default)]
+    pub health_interval_secs: Option<u64>,
+    #[serde(default)]
+    pub health_timeout_secs: Option<u64>,
+    #[serde(default)]
+    pub health_retries: Option<u32>,
+    #[serde(default)]
+    pub health_startup_grace_secs: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

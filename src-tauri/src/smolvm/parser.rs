@@ -58,6 +58,28 @@ fn machine_from_value(v: &Value) -> Option<Machine> {
         .map(|arr| arr.iter().filter_map(port_from_value).collect())
         .unwrap_or_default();
 
+    // Persisted restart/health policy (smolvm >= 0.8.0). Absent on older
+    // versions, in which case these stay None and the UI hides the panel.
+    let restart_policy = string_field(obj, &["restart_policy"]);
+    let restart_max_retries = obj
+        .get("restart_max_retries")
+        .and_then(Value::as_u64)
+        .map(|n| n as u32);
+    let restart_count = obj
+        .get("restart_count")
+        .and_then(Value::as_u64)
+        .map(|n| n as u32);
+    let health_cmd = string_field(obj, &["health_cmd"]);
+    let health_interval_secs = obj.get("health_interval_secs").and_then(Value::as_u64);
+    let health_timeout_secs = obj.get("health_timeout_secs").and_then(Value::as_u64);
+    let health_retries = obj
+        .get("health_retries")
+        .and_then(Value::as_u64)
+        .map(|n| n as u32);
+    let health_startup_grace_secs = obj
+        .get("health_startup_grace_secs")
+        .and_then(Value::as_u64);
+
     Some(Machine {
         name,
         status,
@@ -70,6 +92,14 @@ fn machine_from_value(v: &Value) -> Option<Machine> {
         pid,
         env_count: 0,
         mounts: Vec::new(),
+        restart_policy,
+        restart_max_retries,
+        restart_count,
+        health_cmd,
+        health_interval_secs,
+        health_timeout_secs,
+        health_retries,
+        health_startup_grace_secs,
     })
 }
 
