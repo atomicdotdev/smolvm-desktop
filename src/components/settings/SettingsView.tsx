@@ -150,6 +150,19 @@ export function SettingsView({
     }
   };
 
+  // Lightweight refresh of just the `config show` text after the registries
+  // editor auto-saves. Does NOT bump registriesLoadKey — remounting the editor
+  // would discard its in-memory state mid-edit.
+  const refreshConfigShow = async () => {
+    try {
+      const c = await api.smolvmConfig();
+      setConfig(c);
+      setConfigErr(null);
+    } catch (e) {
+      setConfigErr(String(e));
+    }
+  };
+
   useEffect(() => {
     refresh();
   }, []);
@@ -351,13 +364,14 @@ export function SettingsView({
 
         <section ref={registriesSectionRef}>
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-fg-muted">
-            Registries
+            Registries &amp; Cloud
           </h2>
           <RegistriesEditor
             key={registriesLoadKey}
             initialText={registriesText}
             filePath={registriesPath}
             loadError={registriesErr}
+            onSaved={refreshConfigShow}
           />
         </section>
 

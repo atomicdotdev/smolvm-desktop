@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  ChevronsUpDown,
+  Eye,
+  EyeOff,
   Pencil,
   Plus,
   Save,
@@ -10,12 +13,14 @@ import {
 import { api } from "@/lib/invoke";
 import {
   EMPTY_CONFIG,
-  RegistriesConfig,
+  NamespaceKey,
   RegistryEntry,
+  RegistryNamespace,
+  SmolConfig,
   cloneConfig,
   equals as configsEqual,
-  parse as parseRegistries,
-  stringify as stringifyRegistries,
+  parse as parseConfig,
+  stringify as stringifyConfig,
   suggestEnvVar,
 } from "@/lib/registries-toml";
 
@@ -31,30 +36,80 @@ const noAutoCorrect = {
 
 const HOST_PRESETS = ["docker.io", "ghcr.io", "gcr.io"] as const;
 
+/**
+ * Native selects render shorter than `.input` text fields in WKWebView because
+ * they ignore part of the CSS box model. `appearance-none` makes them respect
+ * it exactly (matching input height); we draw our own chevron back in.
+ */
+function StyledSelect({
+  value,
+  onChange,
+  children,
+  wrapperClassName = "",
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  children: React.ReactNode;
+  wrapperClassName?: string;
+}) {
+  return (
+    <div className={`relative ${wrapperClassName}`}>
+      <select
+        value={value}
+        onChange={onChange}
+        className="input w-full appearance-none pr-8"
+      >
+        {children}
+      </select>
+      <ChevronsUpDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted" />
+    </div>
+  );
+}
+
+const NAMESPACE_META: Record<
+  NamespaceKey,
+  { title: string; blurb: string; noneLabel: string; addLabel: string }
+> = {
+  images: {
+    title: "Image registries",
+    blurb: "Container image registries for base images ([images]).",
+    noneLabel: "No image registries configured.",
+    addLabel: "Add image registry",
+  },
+  machines: {
+    title: "Machine registries",
+    blurb: ".smolmachine artifact registries ([machines]).",
+    noneLabel: "No machine registries configured.",
+    addLabel: "Add machine registry",
+  },
+};
+
 interface RegistriesEditorProps {
   /** Raw TOML text loaded from disk; "" if file doesn't exist. */
   initialText: string;
-  /** Absolute path to the registries.toml file on disk, if known. */
+  /** Absolute path to the config.toml file on disk, if known. */
   filePath: string | null;
   /** Initial load error (e.g. backend couldn't read the file). */
   loadError: string | null;
+  /** Called after a successful auto-save so the parent can refresh derived views. */
+  onSaved?: () => void;
 }
 
 interface DiskState {
   text: string;
-  parsed: RegistriesConfig;
+  parsed: SmolConfig;
   /** Whether the on-disk text round-trips cleanly through structured mode. */
   parsedClean: boolean;
 }
 
 function safeParse(text: string): {
-  config: RegistriesConfig;
+  config: SmolConfig;
   error: string | null;
 } {
   try {
-    return { config: parseRegistries(text), error: null };
+    return { config: parseConfig(text), error: null };
   } catch (e) {
-    return { config: EMPTY_CONFIG, error: String(e) };
+    return { config: cloneConfig(EMPTY_CONFIG), error: String(e) };
   }
 }
 
@@ -62,6 +117,7 @@ export function RegistriesEditor({
   initialText,
   filePath,
   loadError,
+  onSaved,
 }: RegistriesEditorProps) {
   // Initial parse — if the file on disk is malformed, fall back to Raw view.
   const initialParse = useMemo(() => safeParse(initialText), [initialText]);
@@ -75,14 +131,21 @@ export function RegistriesEditor({
   const [view, setView] = useState<View>(
     initialParse.error === null ? "structured" : "raw",
   );
-  const [config, setConfig] = useState<RegistriesConfig>(() =>
+  const [config, setConfig] = useState<SmolConfig>(() =>
     cloneConfig(initialParse.config),
   );
   const [rawText, setRawText] = useState<string>(initialText);
   const [rawParseError, setRawParseError] = useState<string | null>(null);
 
-  const [editing, setEditing] = useState<EditorTarget | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  /** Add/edit modal target, scoped to a namespace. */
+  const [editing, setEditing] = useState<{
+    namespace: NamespaceKey;
+    target: EditorTarget;
+  } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{
+    namespace: NamespaceKey;
+    host: string;
+  } | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
@@ -110,12 +173,12 @@ export function RegistriesEditor({
 
   /** Switch from Structured → Raw: serialize current config into rawText. */
   const switchToRaw = () => {
-    setRawText(stringifyRegistries(config));
+    setRawText(stringifyConfig(config));
     setRawParseError(null);
     setView("raw");
   };
 
-  /** Switch from Raw → Structured: try to parse rawText. */
+  /** Switch from Raw → Structured: try to parse rawText. Stay in Raw on error. */
   const switchToStructured = () => {
     const parsed = safeParse(rawText);
     if (parsed.error) {
@@ -133,15 +196,13 @@ export function RegistriesEditor({
     setSaveStatus(null);
 
     let payload: string;
-    let newConfig: RegistriesConfig;
+    let newConfig: SmolConfig;
     let newText: string;
-    let parsedClean: boolean;
 
     if (view === "structured") {
-      payload = stringifyRegistries(config);
+      payload = stringifyConfig(config);
       newConfig = cloneConfig(config);
       newText = payload;
-      parsedClean = true;
     } else {
       const parsed = safeParse(rawText);
       if (parsed.error) {
@@ -152,19 +213,19 @@ export function RegistriesEditor({
       payload = rawText;
       newConfig = parsed.config;
       newText = rawText;
-      parsedClean = true;
     }
 
     setSaving(true);
     try {
       await api.writeRegistries(payload);
-      setDisk({ text: newText, parsed: newConfig, parsedClean });
+      setDisk({ text: newText, parsed: newConfig, parsedClean: true });
       if (view === "raw") {
         setConfig(cloneConfig(newConfig));
       } else {
         setRawText(newText);
       }
       setSaveStatus("Saved.");
+      onSaved?.();
     } catch (e) {
       setSaveError(String(e));
     } finally {
@@ -172,69 +233,84 @@ export function RegistriesEditor({
     }
   };
 
-  const addRegistry = () => {
-    setEditing({ kind: "add" });
-  };
+  // Auto-save: persist whenever there are unsaved changes, debounced so
+  // typing doesn't thrash the disk. Covers every structured mutation and
+  // (when it parses cleanly) the raw editor. No explicit Save button.
+  useEffect(() => {
+    if (!dirty || saving) return;
+    const t = setTimeout(() => {
+      void onSave();
+    }, 600);
+    return () => clearTimeout(t);
+    // onSave closes over current state; deps below capture every change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, rawText, view, dirty, saving]);
 
-  const editRegistry = (host: string) => {
-    const entry = config.registries.find((r) => r.host === host);
-    if (!entry) return;
-    setEditing({ kind: "edit", entry });
-  };
+  // ----- Cloud mutators -----
 
-  const removeRegistry = (host: string) => {
+  const setCloud = (patch: Partial<SmolConfig["cloud"]>) => {
     setConfig((prev) => {
       const next = cloneConfig(prev);
-      next.registries = next.registries.filter((r) => r.host !== host);
-      if (next.defaultRegistry === host) {
-        next.defaultRegistry = null;
-      }
+      next.cloud = { ...next.cloud, ...patch };
       return next;
     });
     setSaveStatus(null);
   };
 
-  const upsertRegistry = (entry: RegistryEntry, originalHost: string | null) => {
+  // ----- Namespace mutators -----
+
+  const mutateNamespace = (
+    namespace: NamespaceKey,
+    fn: (ns: RegistryNamespace) => void,
+  ) => {
     setConfig((prev) => {
       const next = cloneConfig(prev);
+      fn(next[namespace]);
+      return next;
+    });
+    setSaveStatus(null);
+  };
+
+  const removeRegistry = (namespace: NamespaceKey, host: string) => {
+    mutateNamespace(namespace, (ns) => {
+      ns.registries = ns.registries.filter((r) => r.host !== host);
+      if (ns.defaultRegistry === host) ns.defaultRegistry = null;
+    });
+  };
+
+  const upsertRegistry = (
+    namespace: NamespaceKey,
+    entry: RegistryEntry,
+    originalHost: string | null,
+  ) => {
+    mutateNamespace(namespace, (ns) => {
       if (originalHost === null) {
-        // Add — disallow duplicates.
-        if (next.registries.some((r) => r.host === entry.host)) {
-          return prev;
-        }
-        next.registries.push(entry);
+        if (ns.registries.some((r) => r.host === entry.host)) return;
+        ns.registries.push(entry);
       } else {
-        const idx = next.registries.findIndex((r) => r.host === originalHost);
-        if (idx < 0) return prev;
-        next.registries[idx] = entry;
+        const idx = ns.registries.findIndex((r) => r.host === originalHost);
+        if (idx < 0) return;
+        ns.registries[idx] = entry;
       }
-      return next;
     });
-    setSaveStatus(null);
     setEditing(null);
   };
 
-  const setDefault = (host: string | null) => {
-    setConfig((prev) => ({
-      ...cloneConfig(prev),
-      defaultRegistry: host,
-    }));
-    setSaveStatus(null);
+  const setDefault = (namespace: NamespaceKey, host: string | null) => {
+    mutateNamespace(namespace, (ns) => {
+      ns.defaultRegistry = host;
+    });
   };
 
-  const knownHosts = new Set(config.registries.map((r) => r.host));
-  const defaultIsOrphan =
-    config.defaultRegistry !== null && !knownHosts.has(config.defaultRegistry);
-
   return (
-    <div className="space-y-3 rounded-md border border-border bg-bg-card p-4 text-sm">
+    <div className="space-y-4 rounded-md border border-border bg-bg-card p-4 text-sm">
       <div className="flex items-start justify-between gap-3">
         <p className="text-xs text-fg-muted">
-          Registry credentials and endpoints used by{" "}
-          <span className="font-mono">smolvm pack push</span> /{" "}
-          <span className="font-mono">pull</span>. Saved files are validated by
-          smolvm on its next invocation — malformed configs surface as errors
-          then.
+          smolvm{"'"}s unified config{" "}
+          <span className="font-mono">config.toml</span> — smolcloud API
+          settings plus image and machine registry credentials. Login-managed
+          tokens in this file are preserved untouched. Saved files are validated
+          by smolvm on its next invocation.
         </p>
         <button
           onClick={view === "structured" ? switchToRaw : switchToStructured}
@@ -251,20 +327,42 @@ export function RegistriesEditor({
 
       {view === "structured" && !disk.parsedClean && (
         <div className="rounded border border-starting/40 bg-starting/10 p-2 text-xs text-starting">
-          The file on disk couldn{"’"}t be parsed cleanly; you{"’"}re
-          editing a fresh structure. Saving will overwrite the file.
+          The file on disk couldn{"'"}t be parsed cleanly; you{"'"}re editing a
+          fresh structure. Saving will overwrite the file.
         </div>
       )}
 
       {view === "structured" ? (
-        <StructuredView
-          config={config}
-          defaultIsOrphan={defaultIsOrphan}
-          onSetDefault={setDefault}
-          onAdd={addRegistry}
-          onEdit={editRegistry}
-          onRemove={(host) => setPendingDelete(host)}
-        />
+        <div className="space-y-5">
+          <CloudSection cloud={config.cloud} onChange={setCloud} />
+          <RegistryGroup
+            namespace="images"
+            ns={config.images}
+            onSetDefault={(host) => setDefault("images", host)}
+            onAdd={() => setEditing({ namespace: "images", target: { kind: "add" } })}
+            onEdit={(entry) =>
+              setEditing({ namespace: "images", target: { kind: "edit", entry } })
+            }
+            onRemove={(host) => setPendingDelete({ namespace: "images", host })}
+          />
+          <RegistryGroup
+            namespace="machines"
+            ns={config.machines}
+            onSetDefault={(host) => setDefault("machines", host)}
+            onAdd={() =>
+              setEditing({ namespace: "machines", target: { kind: "add" } })
+            }
+            onEdit={(entry) =>
+              setEditing({
+                namespace: "machines",
+                target: { kind: "edit", entry },
+              })
+            }
+            onRemove={(host) =>
+              setPendingDelete({ namespace: "machines", host })
+            }
+          />
+        </div>
       ) : (
         <RawView
           text={rawText}
@@ -277,21 +375,15 @@ export function RegistriesEditor({
         />
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          onClick={onSave}
-          disabled={saving || !dirty}
-          className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50"
-        >
-          <Save className="h-4 w-4" />
-          {saving ? "Saving…" : "Save"}
-        </button>
-        {dirty && !saveStatus && (
-          <span className="text-xs text-fg-muted">Unsaved changes</span>
-        )}
-        {saveStatus && (
-          <span className="text-xs text-accent">{saveStatus}</span>
-        )}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        {saving || dirty ? (
+          <span className="inline-flex items-center gap-1.5 text-fg-muted">
+            <Save className="h-3.5 w-3.5 animate-pulse" />
+            Saving…
+          </span>
+        ) : saveStatus ? (
+          <span className="text-accent">{saveStatus}</span>
+        ) : null}
       </div>
 
       {filePath && (
@@ -315,21 +407,24 @@ export function RegistriesEditor({
 
       {editing && (
         <RegistryEditModal
-          target={editing}
-          existingHosts={config.registries.map((r) => r.host)}
+          namespace={editing.namespace}
+          target={editing.target}
+          existingHosts={config[editing.namespace].registries.map((r) => r.host)}
           onCancel={() => setEditing(null)}
-          onSubmit={upsertRegistry}
+          onSubmit={(entry, originalHost) =>
+            upsertRegistry(editing.namespace, entry, originalHost)
+          }
         />
       )}
 
       {pendingDelete && (
         <ConfirmDialog
-          title={`Remove registry '${pendingDelete}'?`}
-          body={`This removes ${pendingDelete} from this config file. Other tools using the same file will lose the credentials.`}
+          title={`Remove registry '${pendingDelete.host}'?`}
+          body={`This removes ${pendingDelete.host} from the ${pendingDelete.namespace} section of config.toml.`}
           confirmLabel="Remove"
           onCancel={() => setPendingDelete(null)}
           onConfirm={() => {
-            removeRegistry(pendingDelete);
+            removeRegistry(pendingDelete.namespace, pendingDelete.host);
             setPendingDelete(null);
           }}
         />
@@ -338,77 +433,159 @@ export function RegistriesEditor({
   );
 }
 
-// ---------- Structured view ----------
+// ---------- Cloud section ----------
 
-interface StructuredViewProps {
-  config: RegistriesConfig;
-  defaultIsOrphan: boolean;
+interface CloudSectionProps {
+  cloud: SmolConfig["cloud"];
+  onChange: (patch: Partial<SmolConfig["cloud"]>) => void;
+}
+
+function CloudSection({ cloud, onChange }: CloudSectionProps) {
+  const [showKey, setShowKey] = useState(false);
+
+  return (
+    <section className="space-y-2">
+      <div>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-fg">
+          Cloud
+        </h3>
+        <p className="text-[11px] text-fg-muted">
+          smolcloud API settings ([cloud]). Login tokens are managed by{" "}
+          <span className="font-mono">smolvm login</span> and preserved here
+          untouched.
+        </p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs uppercase tracking-wide text-fg-muted">
+            Endpoint
+          </label>
+          <input
+            value={cloud.endpoint ?? ""}
+            onChange={(e) =>
+              onChange({ endpoint: e.target.value === "" ? null : e.target.value })
+            }
+            placeholder="https://api.smolmachines.com"
+            {...noAutoCorrect}
+            className="input w-full font-mono"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs uppercase tracking-wide text-fg-muted">
+            API key
+          </label>
+          <div className="relative">
+            <input
+              type={showKey ? "text" : "password"}
+              value={cloud.apiKey ?? ""}
+              onChange={(e) =>
+                onChange({ apiKey: e.target.value === "" ? null : e.target.value })
+              }
+              placeholder="smk_…"
+              {...noAutoCorrect}
+              className="input w-full pr-9 font-mono"
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey((v) => !v)}
+              className="absolute inset-y-0 right-0 flex items-center px-2 text-fg-muted hover:text-fg"
+              title={showKey ? "Hide API key" : "Show API key"}
+            >
+              {showKey ? (
+                <EyeOff className="h-4 w-4" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------- Registry group (shared by images + machines) ----------
+
+interface RegistryGroupProps {
+  namespace: NamespaceKey;
+  ns: RegistryNamespace;
   onSetDefault: (host: string | null) => void;
   onAdd: () => void;
-  onEdit: (host: string) => void;
+  onEdit: (entry: RegistryEntry) => void;
   onRemove: (host: string) => void;
 }
 
-function StructuredView({
-  config,
-  defaultIsOrphan,
+function RegistryGroup({
+  namespace,
+  ns,
   onSetDefault,
   onAdd,
   onEdit,
   onRemove,
-}: StructuredViewProps) {
+}: RegistryGroupProps) {
+  const meta = NAMESPACE_META[namespace];
+  const knownHosts = new Set(ns.registries.map((r) => r.host));
+  const defaultIsOrphan =
+    ns.defaultRegistry !== null && !knownHosts.has(ns.defaultRegistry);
+
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="text-xs uppercase tracking-wide text-fg-muted">
+    <section className="space-y-3">
+      <div>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-fg">
+          {meta.title}
+        </h3>
+        <p className="text-[11px] text-fg-muted">{meta.blurb}</p>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-xs uppercase tracking-wide text-fg-muted">
           Default registry
         </label>
-        <select
-          value={config.defaultRegistry ?? ""}
+        <StyledSelect
+          value={ns.defaultRegistry ?? ""}
           onChange={(e) =>
             onSetDefault(e.target.value === "" ? null : e.target.value)
           }
-          className="input py-1 text-xs"
         >
           <option value="">(none)</option>
-          {defaultIsOrphan && config.defaultRegistry !== null && (
-            <option value={config.defaultRegistry}>
-              {config.defaultRegistry} (unknown: deleted)
+          {defaultIsOrphan && ns.defaultRegistry !== null && (
+            <option value={ns.defaultRegistry}>
+              {ns.defaultRegistry} (unknown: deleted)
             </option>
           )}
-          {config.registries.map((r) => (
+          {ns.registries.map((r) => (
             <option key={r.host} value={r.host}>
               {r.host}
             </option>
           ))}
-        </select>
+        </StyledSelect>
         {defaultIsOrphan && (
-          <span className="text-[11px] text-stopped">
-            Default points at a registry no longer in this file.
+          <span className="mt-1 block text-[11px] text-stopped">
+            Default points at a registry no longer in this section.
           </span>
         )}
       </div>
 
-      {config.registries.length === 0 ? (
+      {ns.registries.length === 0 ? (
         <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-fg-muted">
-          <div className="mb-3">No registries configured.</div>
+          <div className="mb-3">{meta.noneLabel}</div>
           <button
             onClick={onAdd}
             className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90"
           >
             <Plus className="h-4 w-4" />
-            Add registry
+            {meta.addLabel}
           </button>
         </div>
       ) : (
         <>
           <div className="space-y-2">
-            {config.registries.map((entry) => (
+            {ns.registries.map((entry) => (
               <RegistryCard
                 key={entry.host}
                 entry={entry}
-                isDefault={config.defaultRegistry === entry.host}
-                onEdit={() => onEdit(entry.host)}
+                isDefault={ns.defaultRegistry === entry.host}
+                onEdit={() => onEdit(entry)}
                 onRemove={() => onRemove(entry.host)}
               />
             ))}
@@ -418,11 +595,11 @@ function StructuredView({
             className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border px-3 py-1.5 text-sm text-fg-muted hover:border-accent/60 hover:text-fg"
           >
             <Plus className="h-4 w-4" />
-            Add registry
+            {meta.addLabel}
           </button>
         </>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -468,9 +645,7 @@ function RegistryCard({ entry, isDefault, onEdit, onRemove }: RegistryCardProps)
       <dl className="grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-1 text-xs">
         <dt className="text-fg-muted">Username</dt>
         <dd className="font-mono break-all">
-          {entry.username ?? (
-            <span className="text-fg-muted">(none)</span>
-          )}
+          {entry.username ?? <span className="text-fg-muted">(none)</span>}
         </dd>
         <dt className="text-fg-muted">Secret</dt>
         <dd className="font-mono break-all">
@@ -517,12 +692,12 @@ function RawView({ text, onChange, parseError }: RawViewProps) {
         value={text}
         onChange={(e) => onChange(e.target.value)}
         {...noAutoCorrect}
-        className="input min-h-[14rem] w-full resize-y font-mono text-xs"
-        placeholder={'# No registries configured yet.'}
+        className="input min-h-[18rem] w-full resize-y font-mono text-xs"
+        placeholder={"# Empty config.toml"}
       />
       {parseError && (
         <div className="rounded border border-stopped/40 bg-stopped/10 p-2 text-xs text-stopped">
-          Couldn{"’"}t parse as TOML: {parseError}
+          Couldn{"'"}t parse as TOML: {parseError}
         </div>
       )}
     </div>
@@ -532,9 +707,10 @@ function RawView({ text, onChange, parseError }: RawViewProps) {
 // ---------- Edit modal ----------
 
 type EditorTarget = { kind: "add" } | { kind: "edit"; entry: RegistryEntry };
-type AuthMode = "env" | "plaintext" | "none";
+type AuthMode = "env" | "plaintext";
 
 interface RegistryEditModalProps {
+  namespace: NamespaceKey;
   target: EditorTarget;
   existingHosts: string[];
   onCancel: () => void;
@@ -542,6 +718,7 @@ interface RegistryEditModalProps {
 }
 
 function RegistryEditModal({
+  namespace,
   target,
   existingHosts,
   onCancel,
@@ -562,15 +739,14 @@ function RegistryEditModal({
 
   const [username, setUsername] = useState<string>(original?.username ?? "");
 
-  // Authentication mode
+  // Authentication mode — env var wins when both are present.
   const initialAuth: AuthMode =
-    original === null
-      ? "env"
-      : original.passwordEnv !== null && original.passwordEnv.length > 0
-        ? "env"
-        : original.password !== null && original.password.length > 0
-          ? "plaintext"
-          : "env";
+    original !== null &&
+    !(original.passwordEnv && original.passwordEnv.length > 0) &&
+    original.password !== null &&
+    original.password.length > 0
+      ? "plaintext"
+      : "env";
   const [authMode, setAuthMode] = useState<AuthMode>(initialAuth);
   const [envName, setEnvName] = useState<string>(
     original?.passwordEnv ?? suggestEnvVar(initialHost || "docker.io"),
@@ -601,8 +777,7 @@ function RegistryEditModal({
 
   const trimmedHost = host.trim();
   const trimmedEnvName = envName.trim();
-  const duplicateHost =
-    !isEdit && existingHosts.some((h) => h === trimmedHost);
+  const duplicateHost = !isEdit && existingHosts.some((h) => h === trimmedHost);
   const usernameMissing = username.length === 0;
 
   let validationError: string | null = null;
@@ -620,22 +795,28 @@ function RegistryEditModal({
 
   const onPresetChange = (next: string) => {
     setHostPreset(next);
-    if (next !== "custom") {
-      setHost(next);
-    }
+    if (next !== "custom") setHost(next);
   };
 
   const onSubmitClick = () => {
     if (validationError !== null) return;
+    // Preserve the unselected auth field when editing so we don't silently
+    // strip an existing plaintext/env value the user chose not to touch.
     const next: RegistryEntry = {
       host: trimmedHost,
       username,
-      passwordEnv: authMode === "env" ? trimmedEnvName : null,
-      password: authMode === "plaintext" ? password : null,
+      passwordEnv:
+        authMode === "env"
+          ? trimmedEnvName
+          : (original?.passwordEnv ?? null),
+      password:
+        authMode === "plaintext" ? password : (original?.password ?? null),
       mirror: mirror.trim().length === 0 ? null : mirror,
     };
     onSubmit(next, isEdit ? (original?.host ?? null) : null);
   };
+
+  const nsLabel = namespace === "images" ? "image" : "machine";
 
   return (
     <div
@@ -648,7 +829,9 @@ function RegistryEditModal({
       >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-semibold">
-            {isEdit ? `Edit ${original?.host ?? ""}` : "Add registry"}
+            {isEdit
+              ? `Edit ${original?.host ?? ""}`
+              : `Add ${nsLabel} registry`}
           </h2>
           <button
             onClick={onCancel}
@@ -664,18 +847,18 @@ function RegistryEditModal({
               Hostname
             </label>
             {!isEdit && (
-              <select
+              <StyledSelect
                 value={hostPreset}
                 onChange={(e) => onPresetChange(e.target.value)}
-                className="input mb-1.5 w-full text-xs"
+                wrapperClassName="mb-1.5"
               >
                 {HOST_PRESETS.map((h) => (
                   <option key={h} value={h}>
                     {h}
                   </option>
                 ))}
-                <option value="custom">Custom{"…"}</option>
-              </select>
+                <option value="custom">Custom…</option>
+              </StyledSelect>
             )}
             <input
               value={host}
@@ -690,8 +873,8 @@ function RegistryEditModal({
             />
             {isEdit && (
               <p className="mt-1 text-[11px] text-fg-muted">
-                Hostname is the identity key and can{"’"}t be changed.
-                Delete and re-add to rename.
+                Hostname is the identity key and can{"'"}t be changed. Delete
+                and re-add to rename.
               </p>
             )}
           </div>
@@ -736,11 +919,9 @@ function RegistryEditModal({
                         className="input w-full font-mono"
                       />
                       <p className="text-[11px] text-fg-muted">
-                        smolvm reads the password from{" "}
-                        <span className="font-mono">
-                          ${trimmedEnvName || "ENV_NAME"}
-                        </span>{" "}
-                        at invocation time.
+                        {`smolvm reads the password from $${
+                          trimmedEnvName || "ENV_NAME"
+                        } at invocation time.`}
                       </p>
                     </div>
                   )}
@@ -766,7 +947,7 @@ function RegistryEditModal({
                         className="input w-full font-mono"
                       />
                       <p className="text-[11px] text-starting">
-                        Stored unencrypted in registries.toml. Prefer env var.
+                        Stored unencrypted in config.toml. Prefer env var.
                       </p>
                     </div>
                   )}
@@ -777,7 +958,8 @@ function RegistryEditModal({
 
           <div>
             <label className="mb-1 block text-xs uppercase tracking-wide text-fg-muted">
-              Mirror URL <span className="normal-case text-fg-muted">(optional)</span>
+              Mirror URL{" "}
+              <span className="normal-case text-fg-muted">(optional)</span>
             </label>
             <input
               value={mirror}
