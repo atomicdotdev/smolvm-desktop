@@ -37,6 +37,7 @@ export interface SystemStats {
 
 export type View =
   | "machines"
+  | "newMachine"
   | "images"
   | "volumes"
   | "packs"

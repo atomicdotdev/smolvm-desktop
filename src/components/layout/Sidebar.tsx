@@ -40,7 +40,10 @@ export function Sidebar({ view, onChange }: Props) {
           <NavButton
             key={item.id}
             item={item}
-            active={view === item.id}
+            active={
+              view === item.id ||
+              (item.id === "machines" && view === "newMachine")
+            }
             onClick={() => onChange(item.id)}
           />
         ))}

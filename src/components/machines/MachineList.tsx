@@ -3,7 +3,6 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { ChevronRight, Loader2, Play, Plus, RefreshCw, RotateCcw, Square, Trash2 } from "lucide-react";
 import { useMachinesStore } from "@/hooks/useMachines";
 import { useMachineDetailTab } from "@/hooks/useMachineDetailTab";
-import { useNewMachineDialog } from "@/hooks/useNewMachineDialog";
 import { getConfirmDestructive } from "@/components/settings/SettingsView";
 import { StatusBadge } from "@/components/shared/Badge";
 import type { Machine } from "@/lib/types";
@@ -12,12 +11,13 @@ interface Props {
   onSelect: (name: string) => void;
   filterImage?: string | null;
   onClearFilter?: () => void;
+  onNew: () => void;
 }
 
 type NetworkFilter = "any" | "on" | "off";
 const IMAGE_ALL = "__all__";
 
-export function MachineList({ onSelect, filterImage, onClearFilter }: Props) {
+export function MachineList({ onSelect, filterImage, onClearFilter, onNew }: Props) {
   const { machines: allMachines, loading, error, lastFetched, refresh, supervised, refreshSupervised } =
     useMachinesStore();
   const [imageFilter, setImageFilter] = useState<string>(filterImage ?? IMAGE_ALL);
@@ -65,7 +65,6 @@ export function MachineList({ onSelect, filterImage, onClearFilter }: Props) {
     return true;
   });
 
-  const openDialog = useNewMachineDialog((s) => s.openDialog);
   const showRefreshing = useStickyFlag(loading, 600);
 
   const handleImageChange = (value: string) => {
@@ -94,7 +93,7 @@ export function MachineList({ onSelect, filterImage, onClearFilter }: Props) {
             Refresh
           </button>
           <button
-            onClick={() => openDialog()}
+            onClick={() => onNew()}
             className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90"
           >
             <Plus className="h-4 w-4" />
@@ -158,7 +157,7 @@ export function MachineList({ onSelect, filterImage, onClearFilter }: Props) {
           totalCount={allMachines.length}
           lastFetched={lastFetched}
           onSelect={onSelect}
-          onNew={() => openDialog()}
+          onNew={() => onNew()}
         />
       </div>
 

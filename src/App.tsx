@@ -5,8 +5,7 @@ import { useMachineDetailTab } from "@/hooks/useMachineDetailTab";
 import { StatusBar } from "@/components/layout/StatusBar";
 import { MachineList } from "@/components/machines/MachineList";
 import { MachineDetail } from "@/components/machines/MachineDetail";
-import { NewMachineDialog } from "@/components/machines/NewMachineDialog";
-import { useNewMachineDialog } from "@/hooks/useNewMachineDialog";
+import { NewMachinePage } from "@/components/machines/NewMachinePage";
 import { useShortcuts } from "@/hooks/useShortcuts";
 import { ImagesView } from "@/components/images/ImagesView";
 import { VolumesView } from "@/components/volumes/VolumesView";
@@ -49,7 +48,6 @@ export default function App() {
   useHealthPolling();
   useMachinesPolling(getPollInterval());
 
-  const dialog = useNewMachineDialog();
   const refreshMachines = useMachinesStore((s) => s.refresh);
 
   const handleNav = (v: View) => {
@@ -75,7 +73,7 @@ export default function App() {
       "mod+,": () => handleNav("settings"),
       "mod+n": (e) => {
         e.preventDefault();
-        dialog.openDialog();
+        handleNav("newMachine");
       },
       "mod+r": (e) => {
         e.preventDefault();
@@ -105,12 +103,12 @@ export default function App() {
         setSelectedMachine(name);
         setView("machines");
       }),
-      listen("tray:new-machine", () => dialog.openDialog()),
+      listen("tray:new-machine", () => handleNav("newMachine")),
     ];
     return () => {
       unlistens.forEach((p) => p.then((fn) => fn()));
     };
-  }, [dialog]);
+  }, []);
 
   return (
     <div className="flex h-screen flex-col">
@@ -124,6 +122,13 @@ export default function App() {
               onBack={() => setSelectedMachine(null)}
               filterImage={machineFilterImage}
               onClearFilter={() => setMachineFilterImage(null)}
+              onNew={() => handleNav("newMachine")}
+            />
+          )}
+          {view === "newMachine" && (
+            <NewMachinePage
+              onCancel={() => handleNav("machines")}
+              onCreated={() => handleNav("machines")}
             />
           )}
           {view === "images" && <ImagesView onViewMachines={gotoMachineByName} />}
@@ -150,11 +155,6 @@ export default function App() {
       <StatusBar onOpenSettings={() => handleNav("settings")} />
       <Toaster />
       <ErrorModal />
-      <NewMachineDialog
-        open={dialog.open}
-        initialImage={dialog.initialImage}
-        onClose={dialog.close}
-      />
       <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       <button
         onClick={() => setHelpOpen(true)}
@@ -215,12 +215,14 @@ function MachinesView({
   onBack,
   filterImage,
   onClearFilter,
+  onNew,
 }: {
   selected: string | null;
   onSelect: (name: string) => void;
   onBack: () => void;
   filterImage: string | null;
   onClearFilter: () => void;
+  onNew: () => void;
 }) {
   const machine = useMachinesStore((s) =>
     selected ? s.machines.find((m) => m.name === selected) ?? null : null,
@@ -234,6 +236,7 @@ function MachinesView({
       onSelect={onSelect}
       filterImage={filterImage}
       onClearFilter={onClearFilter}
+      onNew={onNew}
     />
   );
 }
